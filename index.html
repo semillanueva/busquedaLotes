@@ -1,0 +1,2032 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMS — Germoplasma & Inventario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg:#f5f4f0;--bg2:#eceae4;--bg3:#e2e0d8;--surface:#ffffff;
+    --border:rgba(0,0,0,0.10);--border2:rgba(0,0,0,0.18);
+    --text:#1a1a17;--text2:#5a5a52;--text3:#9a9a8e;
+    --accent:#2d6a4f;--accent-light:#d8f3dc;--accent-text:#1b4332;
+    --amber:#b5460f;--amber-light:#fde8d0;
+    --red:#9b1c1c;--red-light:#fde8e8;
+    --blue:#1e40af;--blue-light:#dbeafe;
+    --gold:#92660a;--gold-light:#fef3c7;
+    --radius:8px;--radius-lg:12px;
+    --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14px;min-height:100vh}
+
+  .topbar{background:var(--text);color:#f5f4f0;padding:0 2rem;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+  .topbar-brand{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.04em}
+  .topbar-brand .dot{width:8px;height:8px;background:#74c69d;border-radius:50%}
+  .topbar-conn{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.45);display:flex;align-items:center;gap:6px}
+  .conn-dot{width:6px;height:6px;border-radius:50%;background:#6b7280;transition:background .3s}
+  .conn-dot.connected{background:#74c69d}
+
+  .layout{display:flex;min-height:calc(100vh - 52px)}
+  .sidebar{width:200px;background:var(--bg2);border-right:1px solid var(--border);padding:1.5rem 0;flex-shrink:0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
+  .nav-label{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding:0 1.25rem;margin-bottom:6px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 1.25rem;cursor:pointer;color:var(--text2);font-size:13px;font-weight:400;border-left:2px solid transparent;transition:all .15s;background:none;border-top:none;border-right:none;border-bottom:none;width:100%;text-align:left}
+  .nav-item:hover{background:var(--bg3);color:var(--text)}
+  .nav-item.active{border-left-color:var(--accent);color:var(--accent-text);background:var(--accent-light);font-weight:500}
+  .nav-item svg{width:16px;height:16px;flex-shrink:0}
+  .nav-badge{margin-left:auto;background:var(--accent);color:white;border-radius:20px;padding:0 6px;font-size:10px;font-family:var(--mono);min-width:18px;text-align:center;line-height:18px;height:18px;display:none}
+  .nav-sep{height:1px;background:var(--border);margin:.75rem 0}
+
+  .main{flex:1;padding:2rem;max-width:1100px;overflow-x:hidden}
+  .panel{display:none}.panel.active{display:block}
+  .page-header{margin-bottom:1.75rem}
+  .page-header h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:4px}
+  .page-header p{font-size:13px;color:var(--text2)}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem 1.5rem;margin-bottom:1rem}
+  .card-title{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-bottom:1rem;font-family:var(--mono)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem}
+
+  label.field-label{font-size:11px;font-weight:500;color:var(--text2);display:block;margin-bottom:4px;letter-spacing:.02em}
+  input[type=text],input[type=password],select,textarea{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);padding:8px 10px;font-family:var(--sans);font-size:13px;color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s}
+  input[type=text]:focus,input[type=password]:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(45,106,79,.12)}
+  textarea{resize:vertical;min-height:80px;font-family:var(--mono);font-size:12px}
+  select{cursor:pointer}
+
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s;white-space:nowrap}
+  .btn svg{width:15px;height:15px}
+  .btn-primary{background:var(--accent);color:white;border-color:var(--accent)}
+  .btn-primary:hover{background:var(--accent-text);border-color:var(--accent-text)}
+  .btn-primary:disabled{opacity:.45;cursor:not-allowed}
+  .btn-ghost{background:transparent;color:var(--text2);border-color:var(--border2)}
+  .btn-ghost:hover{background:var(--bg2);color:var(--text)}
+  .btn-ghost:disabled{opacity:.45;cursor:not-allowed}
+  .btn-danger{background:transparent;color:var(--red);border-color:rgba(155,28,28,.25)}
+  .btn-danger:hover{background:var(--red-light)}
+  .btn-gold{background:var(--gold-light);color:var(--gold);border-color:rgba(146,102,10,.3);font-size:12px;padding:4px 10px}
+  .btn-gold:hover{background:#fde68a}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .metric-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem}
+  .metric-val{font-size:24px;font-weight:600;font-family:var(--mono);color:var(--text);letter-spacing:-.02em}
+  .metric-lbl{font-size:11px;color:var(--text3);margin-top:2px}
+
+  .pill-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .pill{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--sans);transition:all .15s}
+  .pill:hover{background:var(--bg2);color:var(--text)}
+  .pill.active{background:var(--accent);color:white;border-color:var(--accent)}
+
+  .table-wrap{overflow-x:auto;max-height:420px;overflow-y:auto;border-radius:var(--radius);border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  thead{position:sticky;top:0;z-index:2}
+  th{background:var(--bg2);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;font-family:var(--mono)}
+  td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--text)}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:var(--bg)}
+  .selected-row td{background:#fef9e7 !important;border-left:3px solid var(--gold)}
+  .selected-row td:first-child{padding-left:9px}
+
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;letter-spacing:.03em;font-family:var(--mono)}
+  .b-green{background:var(--accent-light);color:var(--accent-text)}
+  .b-amber{background:var(--amber-light);color:var(--amber)}
+  .b-red{background:var(--red-light);color:var(--red)}
+  .b-blue{background:var(--blue-light);color:var(--blue)}
+  .b-gray{background:var(--bg3);color:var(--text2)}
+  .b-gold{background:var(--gold-light);color:var(--gold)}
+
+  .status-bar{font-size:12px;color:var(--text3);min-height:22px;padding:3px 0;font-family:var(--mono);display:flex;align-items:center;gap:6px}
+  .spinner{width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .alert-error{background:var(--red-light);border:1px solid rgba(155,28,28,.2);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:12px;display:none}
+  .alert-info{background:var(--blue-light);border:1px solid rgba(30,64,175,.2);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--blue);margin-bottom:12px}
+
+  .chips-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:32px;padding:4px 0}
+  .chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-size:11px;font-family:var(--mono);color:var(--text2)}
+  .chip-x{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;padding:0;display:flex;align-items:center}
+  .chip-x:hover{color:var(--red)}
+
+  .add-btn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text2);font-family:var(--sans);font-weight:500;transition:all .15s;white-space:nowrap}
+  .add-btn:hover{background:var(--accent-light);color:var(--accent-text);border-color:var(--accent)}
+  .add-btn.added{background:var(--accent-light);color:var(--accent-text);border-color:var(--accent)}
+
+  .sel-btn{background:transparent;border:1px solid rgba(146,102,10,.3);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--gold);font-family:var(--sans);font-weight:500;transition:all .15s;white-space:nowrap}
+  .sel-btn:hover{background:var(--gold-light)}
+  .sel-btn.selected{background:var(--gold-light);color:var(--gold);border-color:var(--gold)}
+
+  .pagination{display:flex;justify-content:flex-end;gap:6px;margin-top:8px;align-items:center}
+  .pagination span{font-size:11px;color:var(--text3);font-family:var(--mono);padding:0 4px}
+
+  .empty-state{text-align:center;padding:2.5rem 1rem;color:var(--text3);font-size:13px}
+  .empty-state p{margin-top:6px;font-size:12px}
+
+  .check-label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text);cursor:pointer;padding:3px 0}
+  input[type=checkbox]{width:auto;accent-color:var(--accent);cursor:pointer}
+
+  .code-preview{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--text2);white-space:pre;overflow:auto;min-height:110px;max-height:160px;line-height:1.6}
+
+  .info-box{background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius-lg);padding:1.25rem 1.5rem}
+  .info-box ol{padding-left:1.2rem}
+  .info-box li{font-size:13px;color:var(--text2);line-height:2}
+  .info-box li strong{color:var(--text);font-weight:500}
+
+  .selected-count{font-size:12px;color:var(--gold);font-family:var(--mono);font-weight:500}
+
+  /* debug panel */
+  .debug-box{background:#1a1a17;border-radius:var(--radius);padding:10px 14px;font-family:var(--mono);font-size:11px;color:#74c69d;max-height:140px;overflow-y:auto;display:none;margin-top:8px;line-height:1.7}
+
+  @media(max-width:700px){
+    .sidebar{width:52px}
+    .nav-item span,.nav-badge,.nav-label{display:none}
+    .main{padding:1rem}
+    .grid2,.grid3,.grid4{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="dot"></div>
+    BMS / Germoplasma &amp; Inventario
+  </div>
+  <div class="topbar-conn">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span id="conn-label">Sin conexión</span>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="nav-label">Sistema</div>
+    <button class="nav-item active" onclick="switchPanel('conexion')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      <span>Conexión</span>
+    </button>
+    <div class="nav-sep"></div>
+    <div class="nav-label">Herramientas</div>
+    <button class="nav-item" onclick="switchPanel('busqueda')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <span>Buscar germoplasma</span>
+    </button>
+    <button class="nav-item" onclick="switchPanel('inventario')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      <span>Inventario / Lotes</span>
+      <span class="nav-badge" id="nb-basket">0</span>
+    </button>
+    <button class="nav-item" onclick="switchPanel('exportar')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Exportar</span>
+    </button>
+  </nav>
+
+  <main class="main">
+
+    <!-- CONEXION -->
+    <div class="panel active" id="panel-conexion">
+      <div class="page-header">
+        <h1>Configuración de conexión</h1>
+        <p>Ingresa los datos de tu instancia BMS para comenzar</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Datos de BMS</div>
+        <div class="grid2">
+          <div><label class="field-label">URL de BMS</label><input type="text" id="c-url" value="https://semillanueva.bmspro.io"></div>
+          <div><label class="field-label">Crop</label><input type="text" id="c-crop" value="maize"></div>
+        </div>
+        <div class="grid2">
+          <div><label class="field-label">Usuario</label><input type="text" id="c-user" value="ronaldvasquez"></div>
+          <div><label class="field-label">Contraseña</label><input type="password" id="c-pass" value="" placeholder="Tu contraseña de BMS"></div>
+        </div>
+        <div class="btn-row" style="margin-top:4px">
+          <button class="btn btn-primary" onclick="conectar()" id="btn-connect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12s2.545-5 7-5c4.454 0 7 5 7 5s-2.546 5-7 5c-4.455 0-7-5-7-5z"/><circle cx="12" cy="12" r="3"/></svg>
+            Conectar a BMS
+          </button>
+          <span id="conn-msg" style="font-size:12px;color:var(--text3);font-family:var(--mono)"></span>
+        </div>
+        <div class="debug-box" id="debug-box"></div>
+      </div>
+      <div class="info-box">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">Flujo de trabajo</div>
+        <ol>
+          <li><strong>Conectar</strong> — ingresa tus credenciales y presiona Conectar</li>
+          <li><strong>Buscar germoplasma</strong> — usa LNAME, pedigrí, nombre derivado, GID o nombre</li>
+          <li><strong>Agregar a canasta</strong> — selecciona los germoplasmas para el estudio</li>
+          <li><strong>Inventario / Lotes</strong> — ve todos los lotes por GID, selecciona el mejor manualmente</li>
+          <li><strong>Exportar</strong> — descarga el CSV con los lotes seleccionados</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- BUSQUEDA -->
+    <div class="panel" id="panel-busqueda">
+      <div class="page-header">
+        <h1>Buscar germoplasma</h1>
+        <p>Búsqueda individual o masiva por LNAME — ve la disponibilidad directamente en los resultados</p>
+      </div>
+
+      <!-- MODE SELECTOR -->
+      <div style="display:flex;gap:0;margin-bottom:1rem;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;width:fit-content">
+        <button id="mode-single" onclick="setSearchMode('single')" style="padding:8px 20px;font-size:13px;font-weight:500;border:none;cursor:pointer;background:var(--accent);color:white;font-family:var(--sans)">🔍 Individual</button>
+        <button id="mode-bulk" onclick="setSearchMode('bulk')" style="padding:8px 20px;font-size:13px;font-weight:500;border:none;cursor:pointer;background:transparent;color:var(--text2);font-family:var(--sans)">📋 Masivo: LNAME → GIDs + lotes</button>
+      </div>
+
+      <!-- SINGLE SEARCH MODE -->
+      <div id="search-mode-single">
+        <div class="card">
+          <div class="card-title">Tipo de búsqueda</div>
+          <div class="pill-row">
+            <button class="pill active" id="stype-lname" onclick="setType('lname')">LNAME</button>
+            <button class="pill" id="stype-pedigree" onclick="setType('pedigree')">Pedigrí</button>
+            <button class="pill" id="stype-derivative" onclick="setType('derivative')">Nombre derivado</button>
+            <button class="pill" id="stype-gid" onclick="setType('gid')">GID</button>
+            <button class="pill" id="stype-name" onclick="setType('name')">Nombre general</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <div style="flex:1">
+              <label class="field-label" id="search-label">Buscar por LNAME</label>
+              <input type="text" id="search-input" placeholder="Escribe para buscar..." onkeydown="if(event.key==='Enter') doSearch(0)">
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="page-size" style="width:75px;font-size:12px;padding:8px 8px">
+                <option value="20">20</option><option value="50" selected>50</option><option value="100">100</option>
+              </select>
+              <button class="btn btn-primary" onclick="doSearch(0)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                Buscar
+              </button>
+            </div>
+          </div>
+          <div class="status-bar" id="search-status" style="margin-top:8px"></div>
+        </div>
+
+        <div class="alert-error" id="search-error"></div>
+
+        <div id="search-results-wrap" style="display:none">
+          <div class="card" style="padding:.75rem 1.25rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <div style="font-size:13px;font-weight:500">
+                Resultados
+                <span id="search-total" style="font-size:11px;font-weight:400;color:var(--text3);font-family:var(--mono);margin-left:4px"></span>
+              </div>
+              <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="addAllToBasket()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Agregar todos con inventario
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th style="width:70px">UUID</th><th style="width:55px;text-align:right">GID</th><th>LNAME</th><th>Pedigrí</th><th>Nombre derivado</th><th style="text-align:right">Disponible</th><th>Fecha lote</th><th style="width:100px">Acción</th>
+                </tr></thead>
+                <tbody id="search-tbody">
+                  <tr><td colspan="7" class="empty-state">Realiza una búsqueda para ver resultados</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="pagination" id="pagination-row"></div>
+        </div>
+      </div>
+
+      <!-- BULK LNAME SEARCH MODE -->
+      <div id="search-mode-bulk" style="display:none">
+        <div class="card">
+          <div class="card-title">Búsqueda masiva: LNAME → GIDs con fecha de creación de lotes</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Pega los LNAMEs (uno por línea) o cárgalos desde un Excel. Para cada LNAME se buscan <strong>todos</strong> los GIDs que lo tienen y, para cada GID, <strong>todos sus lotes con su fecha de creación</strong>.</div>
+
+          <!-- EXCEL IMPORT -->
+          <div style="background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;font-family:var(--mono)">CARGAR DESDE EXCEL (opcional)</div>
+            <div class="grid3" style="margin-bottom:6px">
+              <div><label class="field-label">Archivo .xlsx</label><input type="file" id="xl-file" accept=".xlsx,.xls,.csv" onchange="xlLoadFile(event)" style="font-size:12px"></div>
+              <div><label class="field-label">Hoja</label><select id="xl-sheet" onchange="xlFillColumns()" disabled></select></div>
+              <div><label class="field-label">Columna con LNAME</label><select id="xl-col" disabled></select></div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="xlLoadLnames()" id="xl-btn" disabled>Cargar LNAMEs de la columna</button>
+              <button class="btn btn-gold" style="font-size:12px;padding:5px 12px" onclick="xlLoadYellow()">🟨 Cargar solo LNAMEs en amarillo</button>
+              <span id="xl-msg" style="font-size:11px;color:var(--text3);font-family:var(--mono)"></span>
+            </div>
+          </div>
+
+          <label class="field-label">Lista de LNAMEs (uno por línea)</label>
+          <textarea id="bulk-lnames-input" style="min-height:130px" placeholder="CLQRCWQ120&#10;CLWQZ1714&#10;CLWQHZN49&#10;SNHWZ260455 (F5B nursery)&#10;..."></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:8px;gap:12px;flex-wrap:wrap">
+            <span id="bulk-lname-count" style="font-size:12px;color:var(--text3);font-family:var(--mono)">0 LNAMEs</span>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-clean" checked onchange="updateBulkCount()"> Limpiar sufijos — usar solo el código (ej. "SNHWZ260455 (F5B nursery)" → "SNHWZ260455")</label>
+              <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-exact" checked> Solo GIDs con coincidencia exacta del nombre (si no hay exacta, muestra las parciales marcadas)</label>
+              <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-closed" checked> Incluir lotes cerrados / sin saldo</label>
+              <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-auto-add"> Auto-agregar a canasta el GID con más inventario</label>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn btn-primary" id="btn-bulk-search" onclick="doBulkSearch()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              Buscar todos los LNAMEs
+            </button>
+            <button class="btn btn-ghost" id="btn-bulk-stop" onclick="bulkStop=true" disabled>Detener</button>
+            <button class="btn btn-ghost" onclick="document.getElementById('bulk-lnames-input').value='';updateBulkCount()">Limpiar</button>
+          </div>
+          <div class="status-bar" id="bulk-status" style="margin-top:8px"></div>
+        </div>
+
+        <!-- BULK RESULTS -->
+        <div id="bulk-results-wrap" style="display:none">
+          <div class="card" style="padding:.75rem 1.25rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+              <div style="font-size:13px;font-weight:500">
+                Resultados masivos
+                <span id="bulk-total" style="font-size:11px;font-weight:400;color:var(--text3);font-family:var(--mono);margin-left:4px"></span>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="bulkExportXLSX()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Descargar Excel
+                </button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="bulkExportCSV()">CSV</button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="bulkAddAllWithInventory()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                  Canasta: GIDs con inventario
+                </button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="bulkAddAll()">Canasta: todos</button>
+              </div>
+            </div>
+            <div class="table-wrap" style="max-height:560px">
+              <table>
+                <thead><tr>
+                  <th>LNAME buscado</th><th style="text-align:right">GID</th><th>Nombre BMS</th><th>Coinc.</th><th>Lote (Stock ID)</th><th>Fecha creación lote</th><th style="text-align:right">Disponible</th><th>Unidad</th><th>Estado</th><th>Ubicación</th><th style="width:90px">Acción</th>
+                </tr></thead>
+                <tbody id="bulk-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ORÍGENES -->
+        <div class="card" id="origen-card">
+          <div class="card-title">Orígenes — los GIDs disponibles más recientes por LNAME</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px">
+            Para cada LNAME toma los GIDs <strong>con inventario disponible</strong> (lote no cerrado y saldo &gt; 0), ordenados del <strong>lote creado más recientemente</strong> al más antiguo, y se queda con los primeros N.<br>
+            <strong>1)</strong> Excel aparte con GID, LNAME, DISPONIBLE, UNIDADES y STOCK ID (una fila por lote). &nbsp;
+            <strong>2)</strong> El archivo principal con los GIDs escritos en horizontal en las columnas <em>Origen 1…N</em> de la fila de cada LNAME (si no existen, se crean). Solo se modifica esa hoja; el resto del archivo queda intacto.
+          </div>
+          <div class="btn-row">
+            <label class="field-label" style="margin:0">Máx. orígenes</label>
+            <select id="origen-n" style="width:70px;font-size:12px;padding:5px 8px"><option>5</option><option selected>10</option><option>15</option><option>20</option></select>
+            <button class="btn btn-primary" style="font-size:12px;padding:6px 12px" onclick="origenExportMaterials()">1) Excel de materiales disponibles</button>
+            <button class="btn btn-primary" style="font-size:12px;padding:6px 12px" onclick="origenWriteMain()">2) Archivo principal con Orígenes</button>
+          </div>
+          <div class="status-bar" id="origen-info" style="margin-top:6px">Carga el archivo principal arriba y usa "Cargar solo LNAMEs en amarillo".</div>
+          <div class="status-bar" id="origen-status"></div>
+        </div>
+      </div>
+
+      <!-- DEBUG panel (hidden by default now that it works) -->
+      <div id="debug-card" style="display:none">
+        <pre id="debug-search"></pre><div id="debug-empty"></div>
+      </div>
+    </div>
+
+    <!-- INVENTARIO -->
+    <div class="panel" id="panel-inventario">
+      <div class="page-header">
+        <h1>Inventario / Lotes</h1>
+        <p>Consulta todos los lotes por GID o LNAME — selecciona manualmente el mejor para exportar</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Canasta de germoplasma <span id="basket-count-txt" style="color:var(--text3);font-weight:400;margin-left:4px">(vacía)</span></div>
+        <div class="chips-wrap" id="basket-chips">
+          <span style="font-size:12px;color:var(--text3)">Agrega germoplasma desde "Buscar germoplasma" o ingresa aquí</span>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div class="grid2">
+            <div>
+              <label class="field-label">GIDs manuales (separados por coma o línea nueva)</label>
+              <textarea id="manual-gids" placeholder="12345&#10;67890, 11111"></textarea>
+            </div>
+            <div>
+              <label class="field-label">LNAMEs manuales (separados por línea nueva)</label>
+              <textarea id="manual-lnames" placeholder="CLWQHZN49&#10;CLWQHZN50"></textarea>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:6px">
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px" onclick="addManualGIDs()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              Agregar GIDs
+            </button>
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px" onclick="addManualLNAMEs()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              Agregar LNAMEs
+            </button>
+            <button class="btn btn-danger" style="font-size:12px;padding:6px 12px" onclick="clearBasket()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              Vaciar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-bottom:1rem">
+        <button class="btn btn-primary" id="btn-inv" onclick="consultarInventario()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Consultar inventario en BMS
+        </button>
+        <button class="btn btn-ghost" id="btn-go-export" onclick="switchPanel('exportar')" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Ir a exportar
+        </button>
+      </div>
+
+      <div class="alert-error" id="inv-error"></div>
+      <div class="status-bar" id="inv-status"></div>
+
+      <!-- DIAGNÓSTICO INVENTARIO -->
+      <div id="inv-debug-card" style="background:#1a1a17;border:1px solid #333;border-radius:8px;padding:.75rem 1.25rem;margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:11px;font-weight:600;color:#74c69d;font-family:var(--mono)">🔍 DIAGNÓSTICO — Consulta de lotes</div>
+          <button onclick="document.getElementById('inv-debug-box').textContent=''" style="background:none;border:none;color:#9a9a8e;cursor:pointer;font-size:11px;font-family:var(--mono)">limpiar</button>
+        </div>
+        <pre id="inv-debug-box" style="background:#111;border-radius:6px;padding:10px;font-family:var(--mono);font-size:11px;color:#74c69d;max-height:220px;overflow-y:auto;margin:0;display:none"></pre>
+        <div style="font-size:11px;color:#5a5a52;font-family:var(--mono)">Consulta el inventario para ver qué endpoints responden y cómo...</div>
+      </div>
+
+      <div id="inv-metrics" style="display:none;margin-bottom:1rem">
+        <div class="grid4">
+          <div class="metric-card"><div class="metric-val" id="im-total">0</div><div class="metric-lbl">GIDs consultados</div></div>
+          <div class="metric-card"><div class="metric-val" id="im-lotes">0</div><div class="metric-lbl">Lotes encontrados</div></div>
+          <div class="metric-card"><div class="metric-val" id="im-sel">0</div><div class="metric-lbl">Lotes seleccionados</div></div>
+          <div class="metric-card"><div class="metric-val" id="im-units">0</div><div class="metric-lbl">Unidades totales</div></div>
+        </div>
+      </div>
+
+      <div id="inv-results-wrap" style="display:none">
+        <div class="card" style="padding:.75rem 1.25rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div style="font-size:13px;font-weight:500">Todos los lotes</div>
+              <span class="selected-count" id="sel-count-lbl"></span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <div class="alert-info" style="margin:0;padding:6px 10px;font-size:11px">
+                ⭐ Haz clic en "Seleccionar" para marcar el mejor lote de cada GID
+              </div>
+              <select id="inv-sort" onchange="renderInvTable()" style="font-size:12px;padding:5px 8px;width:190px">
+                <option value="avail_desc">Mayor disponibilidad primero</option>
+                <option value="avail_asc">Menor disponibilidad primero</option>
+                <option value="gid_asc">GID ascendente</option>
+                <option value="date_desc">Fecha más reciente</option>
+                <option value="date_asc">Fecha más antigua</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th style="width:70px">GID</th>
+                <th>LNAME</th>
+                <th>Lote UUID</th>
+                <th style="text-align:right">Disponible</th>
+                <th>Unidad</th>
+                <th>Fecha creación</th>
+                <th>Estado</th>
+                <th>Notas</th>
+                <th style="width:100px">Selección</th>
+              </tr></thead>
+              <tbody id="inv-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPORTAR -->
+    <div class="panel" id="panel-exportar">
+      <div class="page-header">
+        <h1>Exportar para estudio</h1>
+        <p>Configura columnas y filtros — solo se exportan los lotes que seleccionaste</p>
+      </div>
+
+      <div id="export-no-data" class="card" style="display:none">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:40px;height:40px;margin:0 auto 8px;display:block;color:var(--text3)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Sin datos para exportar
+          <p>Ve a "Inventario / Lotes", consulta y selecciona los lotes que necesitas.</p>
+        </div>
+      </div>
+
+      <div id="export-content">
+        <div class="grid3">
+          <div class="card">
+            <div class="card-title">Columnas a incluir</div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <label class="check-label"><input type="checkbox" id="exp-gid" checked> GID</label>
+              <label class="check-label"><input type="checkbox" id="exp-name" checked> Nombre germoplasma</label>
+              <label class="check-label"><input type="checkbox" id="exp-pedigree"> Pedigrí</label>
+              <label class="check-label"><input type="checkbox" id="exp-lot" checked> Lote UUID</label>
+              <label class="check-label"><input type="checkbox" id="exp-avail" checked> Disponibilidad</label>
+              <label class="check-label"><input type="checkbox" id="exp-unit"> Unidad</label>
+              <label class="check-label"><input type="checkbox" id="exp-date" checked> Fecha creación lote</label>
+              <label class="check-label"><input type="checkbox" id="exp-status"> Estado</label>
+              <label class="check-label"><input type="checkbox" id="exp-notes"> Notas</label>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Filtros de exportación</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-family:var(--mono)">Qué lotes incluir</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <label class="check-label"><input type="checkbox" id="ef-selected" checked> Solo lotes seleccionados ⭐</label>
+              <label class="check-label"><input type="checkbox" id="ef-all"> Todos los lotes consultados</label>
+            </div>
+            <div style="margin-top:12px;font-size:11px;color:var(--text3);margin-bottom:6px;font-family:var(--mono)">Disponibilidad</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <label class="check-label"><input type="checkbox" id="ef-active" checked> Con inventario &gt; 0</label>
+              <label class="check-label"><input type="checkbox" id="ef-empty"> Sin inventario (= 0)</label>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Vista previa</div>
+            <div id="export-summary" style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:var(--mono)"></div>
+            <div class="code-preview" id="export-preview">Sin datos aún</div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doExportCSV()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Descargar CSV
+          </button>
+          <button class="btn btn-ghost" onclick="updatePreview()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Actualizar vista previa
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ===================== STATE ===================== */
+let token = '';
+let basket = [];       // {gid, name, pedigree, isLname}
+let invResults = [];   // all lots from inventory query
+let selectedLots = {}; // key = lotUUID, value = true
+let searchResults = [];
+let currentType = 'lname';
+let currentPage = 0;
+
+/* ===================== NAV ===================== */
+function switchPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  const navMap = {conexion:0, busqueda:1, inventario:2, exportar:3};
+  document.querySelectorAll('.nav-item')[navMap[id]].classList.add('active');
+  if (id === 'exportar') { updatePreview(); checkExportData(); }
+}
+
+/* ===================== CONNECTION ===================== */
+async function conectar() {
+  const btn = document.getElementById('btn-connect');
+  const msg = document.getElementById('conn-msg');
+  btn.disabled = true;
+  msg.textContent = 'Conectando...';
+  msg.style.color = 'var(--text3)';
+  try {
+    token = await getToken();
+    msg.textContent = '✓ Conectado';
+    msg.style.color = 'var(--accent)';
+    document.getElementById('conn-dot').classList.add('connected');
+    document.getElementById('conn-label').textContent = document.getElementById('c-user').value;
+  } catch(e) {
+    msg.textContent = '✗ ' + e.message;
+    msg.style.color = 'var(--red)';
+    document.getElementById('conn-dot').classList.remove('connected');
+  }
+  btn.disabled = false;
+}
+
+async function getToken() {
+  const url = document.getElementById('c-url').value.trim();
+  const r = await fetch(url + '/bmsapi/brapi/v2/token', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','accept':'*/*'},
+    body: JSON.stringify({username: document.getElementById('c-user').value.trim(), password: document.getElementById('c-pass').value.trim()})
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
+  const t = d.access_token || d.token || '';
+  if (!t) throw new Error('Token vacío');
+  return t;
+}
+
+async function ensureToken() {
+  if (!token) token = await getToken();
+}
+
+function cfg() {
+  return {url: document.getElementById('c-url').value.trim(), crop: document.getElementById('c-crop').value.trim()};
+}
+
+/* ===================== SEARCH MODE SWITCHER ===================== */
+function setSearchMode(mode) {
+  const single = document.getElementById('search-mode-single');
+  const bulk   = document.getElementById('search-mode-bulk');
+  const btnS   = document.getElementById('mode-single');
+  const btnB   = document.getElementById('mode-bulk');
+  if (mode === 'single') {
+    single.style.display='block'; bulk.style.display='none';
+    btnS.style.background='var(--accent)'; btnS.style.color='white';
+    btnB.style.background='transparent'; btnB.style.color='var(--text2)';
+  } else {
+    single.style.display='none'; bulk.style.display='block';
+    btnB.style.background='var(--accent)'; btnB.style.color='white';
+    btnS.style.background='transparent'; btnS.style.color='var(--text2)';
+  }
+}
+
+/* ===================== LNAME HELPERS ===================== */
+function cleanLname(s) {
+  s = String(s == null ? '' : s).trim();
+  if (!s) return '';
+  if (document.getElementById('bulk-clean') && document.getElementById('bulk-clean').checked) {
+    // "SNHWZ260455 (F5B nursery)" → "SNHWZ260455" ; "CLWQHZN19 mej" → "CLWQHZN19"
+    s = s.split(/[\s(]+/)[0].trim();
+  }
+  return s;
+}
+
+function getBulkLnames() {
+  const raw = document.getElementById('bulk-lnames-input').value;
+  const seen = new Set(), out = [];
+  raw.split(/\n/).forEach(line => {
+    const c = cleanLname(line);
+    if (c && c !== '-' && !seen.has(c.toUpperCase())) { seen.add(c.toUpperCase()); out.push({original: line.trim(), lname: c}); }
+  });
+  return out;
+}
+
+function updateBulkCount() {
+  const n = getBulkLnames().length;
+  document.getElementById('bulk-lname-count').textContent = n + ' LNAMEs únicos';
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const ta = document.getElementById('bulk-lnames-input');
+  if (ta) ta.addEventListener('input', updateBulkCount);
+});
+
+/* ===================== EXCEL IMPORT ===================== */
+let xlWorkbook = null;
+
+function xlLoadFile(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  const msg = document.getElementById('xl-msg');
+  if (!f) return;
+  if (typeof XLSX === 'undefined') { msg.textContent = '✗ No se pudo cargar la librería de Excel (revisa tu conexión)'; return; }
+  msg.textContent = 'Leyendo ' + f.name + '...';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      xlBuffer = e.target.result; xlFileName = f.name; mainRows = [];
+      xlWorkbook = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const sel = document.getElementById('xl-sheet');
+      sel.innerHTML = xlWorkbook.SheetNames.map(n => '<option>' + n + '</option>').join('');
+      sel.disabled = false;
+      xlFillColumns();
+      msg.textContent = '✓ ' + xlWorkbook.SheetNames.length + ' hojas';
+    } catch(err) { msg.textContent = '✗ ' + err.message; }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+// Finds the header row (first row within the top 10 that has a cell like lname/name/nombre)
+function xlSheetRows(sheetName) {
+  const ws = xlWorkbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+  let hdr = 0;
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    if ((rows[i]||[]).some(c => /^(lname|name|nombre|germplasm)/i.test(String(c||'').trim()))) { hdr = i; break; }
+  }
+  return {rows, hdr};
+}
+
+function xlFillColumns() {
+  const sheet = document.getElementById('xl-sheet').value;
+  const {rows, hdr} = xlSheetRows(sheet);
+  const header = rows[hdr] || [];
+  const colSel = document.getElementById('xl-col');
+  let best = -1;
+  colSel.innerHTML = header.map((h, i) => {
+    const label = (h == null || h === '') ? ('Columna ' + XLSX.utils.encode_col(i)) : String(h).replace(/\s+/g,' ');
+    if (best < 0 && /^lname$/i.test(String(h||'').trim())) best = i;
+    return '<option value="' + i + '">' + XLSX.utils.encode_col(i) + ' — ' + label + '</option>';
+  }).join('');
+  if (best < 0) best = header.findIndex(h => /^(name|nombre)$/i.test(String(h||'').trim()));
+  if (best >= 0) colSel.value = String(best);
+  colSel.disabled = false;
+  document.getElementById('xl-btn').disabled = false;
+}
+
+function xlLoadLnames() {
+  const sheet = document.getElementById('xl-sheet').value;
+  const col = parseInt(document.getElementById('xl-col').value);
+  const {rows, hdr} = xlSheetRows(sheet);
+  const vals = rows.slice(hdr + 1).map(r => (r||[])[col]).filter(v => v != null && String(v).trim() !== '' && String(v).trim() !== '-');
+  document.getElementById('bulk-lnames-input').value = vals.map(v => String(v).trim()).join('\n');
+  updateBulkCount();
+  document.getElementById('xl-msg').textContent = '✓ ' + vals.length + ' valores cargados de "' + sheet + '" (' + getBulkLnames().length + ' LNAMEs únicos)';
+}
+
+/* ===================== GERMPLASM SEARCH BY LNAME ===================== */
+// Same attempts as before (A: POST, B: GET — the one that works, C: BrAPI v2)
+async function searchGermplasmByName(url, crop, lname) {
+  const H = {'Authorization':'Bearer '+token,'accept':'application/json'};
+  const pick = d => (d && d.result && Array.isArray(d.result.data)) ? d.result.data
+                  : (d && Array.isArray(d.result)) ? d.result
+                  : (Array.isArray(d) ? d : (d && Array.isArray(d.content) ? d.content : []));
+  try {
+    const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/search', {
+      method:'POST', headers:Object.assign({'Content-Type':'application/json'}, H),
+      body: JSON.stringify({nameFilter:lname, germplasmNames:[lname], page:0, pageSize:100})
+    });
+    if (r.ok) { const l = pick(await r.json()); if (l.length) return {list:l, via:'POST search'}; }
+  } catch(e) {}
+  try {
+    const p = new URLSearchParams({germplasmName: lname, page:0, size:100});
+    const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/search?' + p.toString(), {headers:H});
+    if (r.ok) { const l = pick(await r.json()); if (l.length) return {list:l, via:'GET search'}; }
+  } catch(e) {}
+  try {
+    const r = await fetch(url + '/bmsapi/' + crop + '/brapi/v2/germplasm?germplasmName=' + encodeURIComponent(lname) + '&page=0&pageSize=100', {headers:H});
+    if (r.ok) { const l = pick(await r.json()); if (l.length) return {list:l, via:'BrAPI v2'}; }
+  } catch(e) {}
+  return {list:[], via:''};
+}
+
+// All names a germplasm record exposes (BrAPI synonyms, BMS names, etc.)
+function germNames(g) {
+  const out = [g.germplasmName, g.defaultDisplayName, g.designation, g.preferredName, g.accessionNumber];
+  (g.synonyms || []).forEach(s => out.push(typeof s === 'string' ? s : (s.synonym || s.name)));
+  if (Array.isArray(g.names)) g.names.forEach(n => out.push(typeof n === 'string' ? n : (n.name || n.nval)));
+  else if (typeof g.names === 'string') g.names.split(/[;,]/).forEach(n => out.push(n));
+  return out.filter(Boolean).map(s => String(s).trim());
+}
+
+function isExactMatch(g, lname) {
+  const L = lname.toUpperCase();
+  return germNames(g).some(n => n.toUpperCase() === L);
+}
+
+async function resolveUuidsToGids(url, crop, uuids) {
+  const map = {};
+  for (let i = 0; i < uuids.length; i += 100) {
+    const batch = uuids.slice(i, i + 100);
+    try {
+      const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/matches', {
+        method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json','accept':'application/json'},
+        body: JSON.stringify({germplasmUUIDs: batch})
+      });
+      if (r.ok) {
+        const ml = await r.json();
+        const list = Array.isArray(ml) ? ml : (ml.germplasm||ml.data||ml.result||ml.content||[]);
+        list.forEach((it, idx) => {
+          const n = String(it.gid||it.GID||it.id||'');
+          const u = it.germplasmDbId||it.germplasmUUID||it.uuid||it.uid||'';
+          if (n && u) map[u] = n; else if (n && batch[idx]) map[batch[idx]] = n;
+        });
+      }
+    } catch(e) {}
+  }
+  return map;
+}
+
+function lotDateRaw(l) {
+  return l.createdDate || l.creationDate || l.lotCreatedDate || l.stockCreatedDate || l.dateCreated || l.lastDepositDate || l.stockDate || '';
+}
+
+function toDateObj(v) {
+  if (!v || v === '-') return null;
+  const s = String(v);
+  if (/^\d{10,}$/.test(s)) return new Date(parseInt(s));
+  if (/^\d{8}$/.test(s)) return new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8));     // 20240315
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return new Date(+m[1], +m[2]-1, +m[3]); // ISO, no TZ shift
+  const d = new Date(s); return isNaN(d.getTime()) ? null : d;
+}
+
+function fmtISO(d) { return d ? d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') : ''; }
+
+/* ===================== BULK SEARCH: LNAME → GIDs → LOTES ===================== */
+let bulkResults = [];   // one row per lot (or per GID without lots / per LNAME not found)
+let bulkStop = false;
+
+async function processOneLname(entry, url, crop, opts) {
+  const {lname, original} = entry;
+  const rows = [];
+  const base = {searchedLname: lname, original};
+  const {list: germ} = await searchGermplasmByName(url, crop, lname);
+  if (!germ.length) { rows.push(Object.assign({}, base, {found:false, status:'LNAME no encontrado'})); return rows; }
+
+  // Exact-match filter
+  germ.forEach(g => g._exact = isExactMatch(g, lname));
+  let use = germ;
+  if (opts.exactOnly && germ.some(g => g._exact)) use = germ.filter(g => g._exact);
+
+  // UUID → numeric GID
+  const uuids = use.map(g => String(g.germplasmDbId || g.germplasmUUID || '')).filter(u => u && !/^\d+$/.test(u));
+  const map = uuids.length ? await resolveUuidsToGids(url, crop, uuids) : {};
+
+  for (const g of use) {
+    const dbId = String(g.germplasmDbId || g.germplasmUUID || '');
+    let gid = map[dbId] || '';
+    if (!gid && /^\d+$/.test(String(g.gid||''))) gid = String(g.gid);
+    if (!gid && /^\d+$/.test(dbId)) gid = dbId;
+    const name = g.germplasmName || g.defaultDisplayName || g.designation || lname;
+    const gBase = Object.assign({}, base, {found:true, dbId, numericGid:gid, lname:name, pedigree:g.pedigree||'', exact:g._exact});
+
+    let lots = [];
+    if (gid) lots = await fetchLotsByNumericGID(url, crop, gid);
+    if (!lots.length && dbId) lots = await fetchLotsByDbId(url, crop, dbId);
+
+    if (!opts.includeClosed) lots = lots.filter(l => String(l.status||'').toUpperCase() !== 'CLOSED' && parseFloat(l.availableBalance||l.available||0) > 0);
+
+    if (!lots.length) { rows.push(Object.assign({}, gBase, {lotId:'', stockId:'', available:0, unit:'', lotStatus:'', location:'', rawDate:'', dateObj:null, status:'Sin lotes'})); continue; }
+
+    lots.forEach(l => {
+      const raw = lotDateRaw(l);
+      rows.push(Object.assign({}, gBase, {
+        lotId: l.lotUUID || l.lotId || l.lotDbId || l.uid || '',
+        stockId: l.stockId || l.lotName || '',
+        available: parseFloat(l.availableBalance ?? l.available ?? l.actualBalance ?? 0) || 0,
+        unit: l.unitName || l.unit || l.units || '',
+        lotStatus: l.status || '',
+        location: l.locationName || l.storageLocation || l.locationAbbr || '',
+        notes: l.notes || l.comments || '',
+        createdBy: l.createdByUsername || '',
+        rawDate: raw, dateObj: toDateObj(raw),
+        status: 'OK'
+      }));
+    });
+  }
+  return rows;
+}
+
+async function doBulkSearch() {
+  const entries = getBulkLnames();
+  if (!entries.length) return;
+  bulkResults = []; bulkStop = false;
+  document.getElementById('bulk-results-wrap').style.display = 'none';
+  document.getElementById('btn-bulk-search').disabled = true;
+  document.getElementById('btn-bulk-stop').disabled = false;
+  const opts = {
+    exactOnly: document.getElementById('bulk-exact').checked,
+    includeClosed: document.getElementById('bulk-closed').checked,
+    autoAdd: document.getElementById('bulk-auto-add').checked
+  };
+  const {url, crop} = cfg();
+
+  try { await ensureToken(); }
+  catch(e) { setStatus('bulk-status',false,'✗ Error de token: '+e.message); document.getElementById('btn-bulk-search').disabled=false; document.getElementById('btn-bulk-stop').disabled=true; return; }
+
+  // Small worker pool (4 LNAMEs in parallel), results kept in input order
+  const resultsByIdx = new Array(entries.length);
+  let next = 0, done = 0;
+  async function worker() {
+    while (!bulkStop) {
+      const i = next++; if (i >= entries.length) return;
+      try { resultsByIdx[i] = await processOneLname(entries[i], url, crop, opts); }
+      catch(e) { resultsByIdx[i] = [{searchedLname:entries[i].lname, original:entries[i].original, found:false, status:'Error: '+e.message}]; }
+      done++;
+      setStatus('bulk-status', true, '(' + done + '/' + entries.length + ') procesados — último: "' + entries[i].lname + '"');
+      if (done % 10 === 0) { bulkResults = resultsByIdx.filter(Boolean).flat(); renderBulkTable(); document.getElementById('bulk-results-wrap').style.display='block'; }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  bulkResults = resultsByIdx.filter(Boolean).flat();
+
+  // Auto-add: GID with most inventory per LNAME
+  if (opts.autoAdd) {
+    const best = {};
+    bulkGidSummary().forEach(s => { if (s.totalAvail > 0 && (!best[s.searchedLname] || s.totalAvail > best[s.searchedLname].totalAvail)) best[s.searchedLname] = s; });
+    Object.values(best).forEach(s => {
+      if (!basket.some(b=>b.basketKey===s.dbId)) basket.push({basketKey:s.dbId, numericGid:s.numericGid, dbId:s.dbId, name:s.lname, pedigree:s.pedigree, isLname:false});
+    });
+    updateBasketUI();
+  }
+
+  renderBulkTable();
+  document.getElementById('bulk-results-wrap').style.display = 'block';
+  document.getElementById('btn-bulk-search').disabled = false;
+  document.getElementById('btn-bulk-stop').disabled = true;
+  const gids = new Set(bulkResults.filter(r=>r.found&&(r.numericGid||r.dbId)).map(r=>r.searchedLname+'|'+(r.numericGid||r.dbId))).size;
+  const lots = bulkResults.filter(r=>r.lotId||r.stockId).length;
+  const notFound = bulkResults.filter(r=>!r.found).length;
+  setStatus('bulk-status', false, (bulkStop?'⏹ Detenido':'✓ Completado') + ' — ' + entries.length + ' LNAMEs · ' + gids + ' GIDs · ' + lots + ' lotes' + (notFound?' · '+notFound+' LNAMEs no encontrados':''));
+}
+
+// One row per (LNAME, GID)
+function bulkGidSummary() {
+  const m = new Map();
+  bulkResults.filter(r => r.found).forEach(r => {
+    const k = r.searchedLname + '|' + (r.numericGid || r.dbId);
+    if (!m.has(k)) m.set(k, {searchedLname:r.searchedLname, original:r.original, numericGid:r.numericGid, dbId:r.dbId, lname:r.lname, pedigree:r.pedigree, exact:r.exact, nLots:0, nActive:0, totalAvail:0, unit:'', first:null, last:null});
+    const s = m.get(k);
+    if (r.lotId || r.stockId) {
+      s.nLots++;
+      if (String(r.lotStatus).toUpperCase() !== 'CLOSED') s.nActive++;
+      s.totalAvail += r.available || 0;
+      if (!s.unit && r.unit) s.unit = r.unit;
+      if (r.dateObj) { if (!s.first || r.dateObj < s.first) s.first = r.dateObj; if (!s.last || r.dateObj > s.last) s.last = r.dateObj; }
+    }
+  });
+  return [...m.values()];
+}
+
+function renderBulkTable() {
+  const tbody = document.getElementById('bulk-tbody'); tbody.innerHTML = '';
+  let lastL = '', lastG = '';
+  bulkResults.forEach(row => {
+    const tr = document.createElement('tr');
+    const newL = row.searchedLname !== lastL; const newG = newL || (row.numericGid||row.dbId) !== lastG;
+    if (newL && lastL) tr.style.borderTop = '2px solid var(--border2)';
+    lastL = row.searchedLname; lastG = row.numericGid || row.dbId;
+    const inB = row.dbId && basket.some(b=>b.basketKey===row.dbId);
+    let badge;
+    if (!row.found) badge = '<span class="badge b-red">' + row.status + '</span>';
+    else if (row.status === 'Sin lotes') badge = '<span class="badge b-gray">Sin lotes</span>';
+    else if (String(row.lotStatus).toUpperCase() === 'CLOSED') badge = '<span class="badge b-gray">Cerrado</span>';
+    else if (row.available > 0) badge = '<span class="badge b-green">Activo</span>';
+    else badge = '<span class="badge b-amber">' + (row.lotStatus || 'Sin saldo') + '</span>';
+    const coinc = !row.found ? '' : (row.exact ? '<span class="badge b-green">Exacta</span>' : '<span class="badge b-amber">Parcial</span>');
+    const avail = (row.lotId||row.stockId) ? (row.available > 0 ? '<span style="color:var(--accent-text);font-weight:600">' + row.available.toLocaleString() + '</span>' : '<span style="color:var(--text3)">0</span>') : '-';
+    tr.innerHTML =
+      '<td><strong style="font-family:var(--mono);font-size:12px;color:var(--accent-text)">' + (newL ? row.searchedLname : '') + '</strong></td>' +
+      '<td style="text-align:right;font-family:var(--mono);font-size:12px;font-weight:600">' + (newG ? (row.numericGid || '-') : '') + '</td>' +
+      '<td>' + (newG ? (row.lname || '-') : '') + '</td>' +
+      '<td>' + (newG ? coinc : '') + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px" title="' + (row.lotId||'') + '">' + (row.stockId || (row.lotId ? row.lotId.substring(0,12)+'…' : '-')) + '</td>' +
+      '<td style="font-family:var(--mono);font-size:12px;white-space:nowrap;font-weight:500">' + (row.dateObj ? formatDate(fmtISO(row.dateObj)) : (row.rawDate || '-')) + '</td>' +
+      '<td style="text-align:right;font-family:var(--mono)">' + avail + '</td>' +
+      '<td style="color:var(--text3);font-size:11px">' + (row.unit || '') + '</td>' +
+      '<td>' + badge + '</td>' +
+      '<td style="font-size:11px;color:var(--text2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (row.location||'') + '">' + (row.location || '') + '</td>' +
+      '<td>' + (newG && row.found && row.dbId ? '<button class="add-btn' + (inB?' added':'') + '" onclick="bulkToggleBasket(\'' + escQ(row.dbId) + '\',\'' + escQ(row.numericGid) + '\',\'' + escQ(row.lname) + '\',\'' + escQ(row.pedigree) + '\')">' + (inB?'✓ Agregado':'+ Canasta') + '</button>' : '') + '</td>';
+    tbody.appendChild(tr);
+  });
+  const gids = new Set(bulkResults.filter(r=>r.found&&(r.numericGid||r.dbId)).map(r=>r.searchedLname+'|'+(r.numericGid||r.dbId))).size;
+  const lots = bulkResults.filter(r=>r.lotId||r.stockId).length;
+  document.getElementById('bulk-total').textContent = '(' + gids + ' GIDs · ' + lots + ' lotes)';
+}
+
+function bulkToggleBasket(dbId, numericGid, name, ped) {
+  const idx = basket.findIndex(b=>b.basketKey===dbId);
+  if (idx >= 0) basket.splice(idx,1);
+  else basket.push({basketKey:dbId, numericGid, dbId, name, pedigree:ped, isLname:false});
+  updateBasketUI(); renderBulkTable();
+}
+
+function bulkAddAllWithInventory() {
+  bulkGidSummary().filter(s => s.totalAvail > 0 && s.dbId).forEach(s => {
+    if (!basket.some(b=>b.basketKey===s.dbId)) basket.push({basketKey:s.dbId, numericGid:s.numericGid, dbId:s.dbId, name:s.lname, pedigree:s.pedigree, isLname:false});
+  });
+  updateBasketUI(); renderBulkTable();
+}
+
+function bulkAddAll() {
+  bulkGidSummary().filter(s => s.dbId).forEach(s => {
+    if (!basket.some(b=>b.basketKey===s.dbId)) basket.push({basketKey:s.dbId, numericGid:s.numericGid, dbId:s.dbId, name:s.lname, pedigree:s.pedigree, isLname:false});
+  });
+  updateBasketUI(); renderBulkTable();
+}
+
+/* ===================== BULK EXPORT ===================== */
+function bulkDetailRows() {
+  return bulkResults.map(r => ({
+    'LNAME original': r.original || r.searchedLname,
+    'LNAME buscado': r.searchedLname,
+    'GID': r.numericGid ? Number(r.numericGid) : '',
+    'Nombre BMS': r.lname || '',
+    'Coincidencia': !r.found ? '' : (r.exact ? 'Exacta' : 'Parcial'),
+    'Pedigrí': r.pedigree || '',
+    'Stock ID': r.stockId || '',
+    'Lote UUID': r.lotId || '',
+    'Fecha creación lote': r.dateObj || (r.rawDate || ''),
+    'Disponible': (r.lotId||r.stockId) ? r.available : '',
+    'Unidad': r.unit || '',
+    'Estado lote': r.lotStatus || '',
+    'Ubicación': r.location || '',
+    'Creado por': r.createdBy || '',
+    'Notas': r.notes || '',
+    'Resultado': r.status || ''
+  }));
+}
+
+function bulkSummaryRows() {
+  const sums = bulkGidSummary();
+  const rows = sums.map(s => ({
+    'LNAME buscado': s.searchedLname,
+    'GID': s.numericGid ? Number(s.numericGid) : '',
+    'Nombre BMS': s.lname,
+    'Coincidencia': s.exact ? 'Exacta' : 'Parcial',
+    'Pedigrí': s.pedigree,
+    '# lotes': s.nLots,
+    '# lotes no cerrados': s.nActive,
+    'Disponible total': s.totalAvail,
+    'Unidad': s.unit,
+    'Fecha primer lote': s.first || '',
+    'Fecha último lote': s.last || ''
+  }));
+  bulkResults.filter(r => !r.found).forEach(r => rows.push({'LNAME buscado': r.searchedLname, 'GID':'', 'Nombre BMS': r.status}));
+  return rows;
+}
+
+function bulkExportXLSX() {
+  if (!bulkResults.length) return;
+  if (typeof XLSX === 'undefined') { bulkExportCSV(); return; }
+  const wb = XLSX.utils.book_new();
+  const mk = (rows, widths) => {
+    const ws = XLSX.utils.json_to_sheet(rows, {cellDates:true, dateNF:'dd/mm/yyyy'});
+    ws['!cols'] = widths.map(w => ({wch:w}));
+    if (ws['!ref']) ws['!autofilter'] = {ref: ws['!ref']};
+    return ws;
+  };
+  XLSX.utils.book_append_sheet(wb, mk(bulkSummaryRows(), [16,9,22,11,40,8,10,14,8,14,14]), 'Resumen por GID');
+  XLSX.utils.book_append_sheet(wb, mk(bulkDetailRows(), [26,16,9,22,11,40,14,38,14,11,8,10,22,14,24,16]), 'Detalle lotes');
+  XLSX.writeFile(wb, 'LNAME_GIDs_lotes_' + new Date().toISOString().slice(0,10) + '.xlsx', {cellDates:true});
+}
+
+function bulkExportCSV() {
+  const rows = bulkDetailRows(); if (!rows.length) return;
+  const h = Object.keys(rows[0]);
+  const csv = [h.join(',')].concat(rows.map(r => h.map(k => { let v = r[k]; if (v instanceof Date) v = fmtISO(v); return '"' + String(v ?? '').replace(/"/g,'""') + '"'; }).join(','))).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'}));
+  a.download = 'LNAME_GIDs_lotes_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+/* ===================== ORÍGENES: 10 GIDs más recientes por LNAME ===================== */
+// Edits ONLY the target sheet XML inside the .xlsx (JSZip) so the rest of the file stays intact.
+const XNS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+let xlBuffer = null, xlFileName = '';
+let mainRows = [];   // [{row, original, lname}] yellow LNAME rows of the main sheet
+
+function colToNum(c) { let n = 0; for (const ch of c) n = n * 26 + (ch.charCodeAt(0) - 64); return n; }
+function numToCol(n) { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+function splitRef(ref) { const m = String(ref).match(/^([A-Z]+)(\d+)$/); return m ? {col: colToNum(m[1]), row: +m[2]} : null; }
+
+async function xlOpenZip() {
+  if (!xlBuffer) throw new Error('Primero carga el archivo principal (.xlsx)');
+  if (typeof JSZip === 'undefined') throw new Error('No se pudo cargar JSZip (revisa tu conexión)');
+  const zip = await JSZip.loadAsync(xlBuffer);
+  const P = new DOMParser();
+  const parse = async p => { const f = zip.file(p); return f ? P.parseFromString(await f.async('string'), 'application/xml') : null; };
+  const wbx = await parse('xl/workbook.xml');
+  const rels = await parse('xl/_rels/workbook.xml.rels');
+  return {zip, parse, wbx, rels};
+}
+
+async function xlSheetPath(ctx, sheetName) {
+  const sh = [...ctx.wbx.getElementsByTagNameNS(XNS, 'sheet')].find(s => s.getAttribute('name') === sheetName);
+  if (!sh) throw new Error('No existe la hoja "' + sheetName + '"');
+  const rid = sh.getAttribute('r:id') || sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+  const rel = [...ctx.rels.getElementsByTagName('Relationship')].find(r => r.getAttribute('Id') === rid);
+  let t = rel.getAttribute('Target').replace(/^\//, '');
+  if (!t.startsWith('xl/')) t = 'xl/' + t;
+  return t;
+}
+
+function cellText(c, sst) {
+  if (!c) return '';
+  const t = c.getAttribute('t');
+  if (t === 'inlineStr') return [...c.getElementsByTagNameNS(XNS, 't')].map(x => x.textContent).join('');
+  const v = c.getElementsByTagNameNS(XNS, 'v')[0];
+  if (!v) return '';
+  return t === 's' ? (sst[+v.textContent] || '') : v.textContent;
+}
+
+async function xlContext(sheetName) {
+  const ctx = await xlOpenZip();
+  const path = await xlSheetPath(ctx, sheetName);
+  const sheet = await ctx.parse(path);
+  const sstDoc = await ctx.parse('xl/sharedStrings.xml');
+  const sst = sstDoc ? [...sstDoc.getElementsByTagNameNS(XNS, 'si')].map(si => [...si.getElementsByTagNameNS(XNS, 't')].filter(t => !t.parentNode || t.parentNode.localName !== 'rPh').map(t => t.textContent).join('')) : [];
+  const styles = await ctx.parse('xl/styles.xml');
+  const xfs = styles ? [...styles.getElementsByTagNameNS(XNS, 'cellXfs')[0].getElementsByTagNameNS(XNS, 'xf')] : [];
+  const fills = styles ? [...styles.getElementsByTagNameNS(XNS, 'fills')[0].getElementsByTagNameNS(XNS, 'fill')] : [];
+  const isColored = s => {
+    const xf = xfs[+s || 0]; if (!xf) return false;
+    const fill = fills[+(xf.getAttribute('fillId') || 0)]; if (!fill) return false;
+    const pf = fill.getElementsByTagNameNS(XNS, 'patternFill')[0];
+    if (!pf || pf.getAttribute('patternType') !== 'solid') return false;
+    const fg = pf.getElementsByTagNameNS(XNS, 'fgColor')[0]; if (!fg) return false;
+    const rgb = (fg.getAttribute('rgb') || '').toUpperCase();
+    return !(rgb === 'FFFFFFFF' || rgb === '00000000' || rgb === '00FFFFFF');
+  };
+  // index cells
+  const rowEls = {}; const cells = {};
+  [...sheet.getElementsByTagNameNS(XNS, 'row')].forEach(r => {
+    const rn = +r.getAttribute('r'); rowEls[rn] = r;
+    [...r.getElementsByTagNameNS(XNS, 'c')].forEach(c => { cells[c.getAttribute('r')] = c; });
+  });
+  return Object.assign(ctx, {path, sheet, sst, isColored, rowEls, cells});
+}
+
+function findHeaderCol(ctx, re) {
+  const r1 = ctx.rowEls[1]; if (!r1) return -1;
+  for (const c of r1.getElementsByTagNameNS(XNS, 'c')) if (re.test(cellText(c, ctx.sst).trim())) return splitRef(c.getAttribute('r')).col;
+  return -1;
+}
+
+async function xlLoadYellow() {
+  const msg = document.getElementById('xl-msg');
+  try {
+    const sheet = document.getElementById('xl-sheet').value;
+    const ctx = await xlContext(sheet);
+    let col = findHeaderCol(ctx, /^lname$/i);
+    if (col < 0) col = parseInt(document.getElementById('xl-col').value) + 1;
+    const L = numToCol(col);
+    mainRows = [];
+    Object.keys(ctx.rowEls).map(Number).sort((a,b)=>a-b).forEach(rn => {
+      if (rn < 2) return;
+      const c = ctx.cells[L + rn]; if (!c) return;
+      const val = cellText(c, ctx.sst).trim();
+      if (val && val !== '-' && ctx.isColored(c.getAttribute('s'))) mainRows.push({row: rn, original: val, lname: cleanLname(val)});
+    });
+    document.getElementById('bulk-lnames-input').value = mainRows.map(r => r.original).join('\n');
+    updateBulkCount();
+    msg.textContent = '✓ ' + mainRows.length + ' LNAMEs resaltados (amarillo) en columna ' + L + ' de "' + sheet + '"';
+    document.getElementById('origen-info').textContent = mainRows.length + ' filas de "' + sheet + '" listas para recibir Orígenes.';
+  } catch(e) { msg.textContent = '✗ ' + e.message; }
+}
+
+// Ranking: per LNAME, GIDs with available stock (lot not CLOSED, saldo > 0),
+// most recent lot creation date first, then higher GID.
+function origenRanking(maxN) {
+  const by = {};
+  bulkResults.filter(r => r.found && r.numericGid && (r.lotId || r.stockId) && r.available > 0 && String(r.lotStatus).toUpperCase() !== 'CLOSED')
+    .forEach(r => {
+      const k = r.searchedLname.toUpperCase();
+      by[k] = by[k] || {};
+      const g = by[k][r.numericGid] = by[k][r.numericGid] || {gid: r.numericGid, lname: r.lname, last: null, lots: []};
+      g.lots.push(r);
+      if (r.dateObj && (!g.last || r.dateObj > g.last)) g.last = r.dateObj;
+    });
+  const out = {};
+  Object.keys(by).forEach(k => {
+    out[k] = Object.values(by[k]).sort((a, b) => ((b.last ? b.last.getTime() : 0) - (a.last ? a.last.getTime() : 0)) || (+b.gid - +a.gid)).slice(0, maxN);
+    out[k].forEach(g => g.lots.sort((a, b) => b.available - a.available));
+  });
+  return out;
+}
+
+function origenTargetList() {
+  // Use yellow rows if loaded; otherwise the LNAMEs searched
+  if (mainRows.length) return mainRows;
+  return getBulkLnames().map(e => ({row: null, original: e.original, lname: e.lname}));
+}
+
+function origenExportMaterials() {
+  if (!bulkResults.length) { alert('Primero ejecuta la búsqueda'); return; }
+  const N = parseInt(document.getElementById('origen-n').value) || 10;
+  const rank = origenRanking(N);
+  const rows = [];
+  origenTargetList().forEach(t => {
+    const list = rank[t.lname.toUpperCase()] || [];
+    if (!list.length) { rows.push({'GID':'', 'LNAME': t.original, 'DISPONIBLE':'', 'UNIDADES':'', 'STOCK ID':'', 'Origen #':'', 'Fecha creación lote':'', 'Nota':'Sin materiales disponibles en BMS'}); return; }
+    list.forEach((g, i) => g.lots.forEach(l => rows.push({
+      'GID': Number(g.gid), 'LNAME': t.original, 'DISPONIBLE': l.available, 'UNIDADES': l.unit || '', 'STOCK ID': l.stockId || '',
+      'Origen #': i + 1, 'Fecha creación lote': l.dateObj || (l.rawDate || ''), 'Nota': ''
+    })));
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows, {cellDates:true, dateNF:'dd/mm/yyyy'});
+  ws['!cols'] = [10, 28, 12, 16, 18, 9, 16, 32].map(w => ({wch:w}));
+  if (ws['!ref']) ws['!autofilter'] = {ref: ws['!ref']};
+  XLSX.utils.book_append_sheet(wb, ws, 'Materiales disponibles');
+  XLSX.writeFile(wb, 'Materiales_disponibles_por_LNAME_' + new Date().toISOString().slice(0,10) + '.xlsx', {cellDates:true});
+}
+
+async function origenWriteMain() {
+  const st = document.getElementById('origen-status');
+  try {
+    if (!bulkResults.length) throw new Error('Primero ejecuta la búsqueda');
+    if (!mainRows.length) throw new Error('Carga el archivo principal y presiona "Cargar LNAMEs en amarillo"');
+    const N = parseInt(document.getElementById('origen-n').value) || 10;
+    const sheetName = document.getElementById('xl-sheet').value;
+    const ctx = await xlContext(sheetName);
+    const doc = ctx.sheet;
+    const rank = origenRanking(N);
+
+    // 1. Locate / create header columns "Origen 1..N"
+    const r1 = ctx.rowEls[1];
+    const hdrCells = [...r1.getElementsByTagNameNS(XNS, 'c')];
+    const origenCols = [];
+    for (let i = 1; i <= N; i++) origenCols.push(findHeaderCol(ctx, new RegExp('^origen\\s*' + i + '$', 'i')));
+    if (origenCols.some(c => c < 0)) {
+      // place missing ones right after the last used header column (or after Origen i-1)
+      const lastHdr = Math.max(...hdrCells.filter(c => cellText(c, ctx.sst).trim() !== '').map(c => splitRef(c.getAttribute('r')).col));
+      const styleSrc = hdrCells.find(c => splitRef(c.getAttribute('r')).col === lastHdr);
+      let nextCol = lastHdr + 1;
+      for (let i = 0; i < N; i++) {
+        if (origenCols[i] >= 0) { nextCol = origenCols[i] + 1; continue; }
+        origenCols[i] = nextCol++;
+        setCell(doc, ctx, 1, origenCols[i], {str: 'Origen ' + (i + 1), style: styleSrc ? styleSrc.getAttribute('s') : null});
+      }
+    }
+
+    // 2. Write GIDs horizontally per LNAME row
+    let filled = 0, empty = 0, totalG = 0;
+    mainRows.forEach(t => {
+      const list = rank[t.lname.toUpperCase()] || [];
+      if (list.length) filled++; else empty++;
+      for (let i = 0; i < N; i++) {
+        const g = list[i];
+        setCell(doc, ctx, t.row, origenCols[i], g ? {num: Number(g.gid)} : {clear: true});
+        if (g) totalG++;
+      }
+    });
+
+    // 3. Fix <dimension>
+    const dim = doc.getElementsByTagNameNS(XNS, 'dimension')[0];
+    if (dim) {
+      const [a, b] = dim.getAttribute('ref').split(':');
+      const end = splitRef(b || a); const maxC = Math.max(end ? end.col : 1, ...origenCols);
+      dim.setAttribute('ref', (a || 'A1') + ':' + numToCol(maxC) + (end ? end.row : 1));
+    }
+    // 4. Column widths for new columns if <cols> exists and doesn't cover them
+    ensureColWidth(doc, origenCols, 11);
+
+    let xml = new XMLSerializer().serializeToString(doc);
+    if (!xml.startsWith('<?xml')) xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + xml;
+    ctx.zip.file(ctx.path, xml);
+    const blob = await ctx.zip.generateAsync({type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (xlFileName.replace(/\.xlsx?$/i, '') || 'Archivo') + '_con_Origenes.xlsx';
+    a.click();
+    st.textContent = '✓ ' + filled + ' LNAMEs con orígenes (' + totalG + ' GIDs escritos) · ' + empty + ' sin materiales disponibles';
+  } catch(e) { st.textContent = '✗ ' + e.message; }
+}
+
+function setCell(doc, ctx, rowN, colN, val) {
+  let row = ctx.rowEls[rowN];
+  if (!row) {
+    row = doc.createElementNS(XNS, 'row'); row.setAttribute('r', rowN);
+    const sd = doc.getElementsByTagNameNS(XNS, 'sheetData')[0];
+    const after = [...sd.getElementsByTagNameNS(XNS, 'row')].find(r => +r.getAttribute('r') > rowN);
+    sd.insertBefore(row, after || null); ctx.rowEls[rowN] = row;
+  }
+  row.removeAttribute('spans');
+  const ref = numToCol(colN) + rowN;
+  let c = ctx.cells[ref];
+  if (!c) {
+    if (val.clear) return;
+    c = doc.createElementNS(XNS, 'c'); c.setAttribute('r', ref);
+    const after = [...row.getElementsByTagNameNS(XNS, 'c')].find(x => splitRef(x.getAttribute('r')).col > colN);
+    row.insertBefore(c, after || null); ctx.cells[ref] = c;
+  }
+  while (c.firstChild) c.removeChild(c.firstChild);
+  c.removeAttribute('t');
+  if (val.style != null && !c.getAttribute('s')) c.setAttribute('s', val.style);
+  if (val.num != null) { const v = doc.createElementNS(XNS, 'v'); v.textContent = String(val.num); c.appendChild(v); }
+  else if (val.str != null) { c.setAttribute('t', 'inlineStr'); const is = doc.createElementNS(XNS, 'is'); const t = doc.createElementNS(XNS, 't'); t.textContent = val.str; is.appendChild(t); c.appendChild(is); }
+}
+
+function ensureColWidth(doc, colsArr, width) {
+  let cols = doc.getElementsByTagNameNS(XNS, 'cols')[0];
+  const covered = n => cols && [...cols.getElementsByTagNameNS(XNS, 'col')].some(c => n >= +c.getAttribute('min') && n <= +c.getAttribute('max'));
+  const missing = colsArr.filter(n => !covered(n));
+  if (!missing.length) return;
+  if (!cols) {
+    cols = doc.createElementNS(XNS, 'cols');
+    const sd = doc.getElementsByTagNameNS(XNS, 'sheetData')[0];
+    sd.parentNode.insertBefore(cols, sd);
+  }
+  missing.forEach(n => {
+    const c = doc.createElementNS(XNS, 'col');
+    c.setAttribute('min', n); c.setAttribute('max', n); c.setAttribute('width', width); c.setAttribute('customWidth', '1');
+    const after = [...cols.getElementsByTagNameNS(XNS, 'col')].find(x => +x.getAttribute('min') > n);
+    cols.insertBefore(c, after || null);
+  });
+}
+
+/* ===================== SEARCH ===================== */
+function setType(t) {
+  currentType = t;
+  document.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
+  document.getElementById('stype-' + t).classList.add('active');
+  const labels = {lname:'Buscar por LNAME', pedigree:'Buscar por pedigrí', derivative:'Buscar por nombre derivado', gid:'Buscar por GID', name:'Buscar por nombre general'};
+  document.getElementById('search-label').textContent = labels[t] || 'Buscar';
+}
+
+async function doSearch(page) {
+  page = page || 0; currentPage = page;
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) { showSearchErr('Ingresa un término de búsqueda'); return; }
+  document.getElementById('search-error').style.display = 'none';
+  setStatus('search-status', true, 'Buscando en BMS...');
+  document.getElementById('search-results-wrap').style.display = 'none';
+  const ps = parseInt(document.getElementById('page-size').value);
+  try {
+    await ensureToken();
+    const {url, crop} = cfg();
+
+    if (currentType === 'gid') {
+      // Direct lookup by GID
+      const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/' + q, {
+        headers: {'Authorization':'Bearer '+token,'accept':'application/json'}
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      const item = d.result || d;
+      searchResults = (item && (item.germplasmDbId || item.gid)) ? [item] : [];
+    } else {
+      // POST search — try multiple field combinations for better LNAME matching
+      let body = {page, pageSize: ps};
+      if (currentType === 'lname' || currentType === 'name') {
+        // BMS may use 'germplasmName' or 'nameType' filter — send both nameContains and germplasmNames
+        body.nameFilter = q;           // some BMS versions use this
+        body.germplasmNames = [q];     // exact match attempt
+      } else if (currentType === 'pedigree') {
+        body.pedigrees = [q];
+      } else if (currentType === 'derivative') {
+        body.germplasmNames = [q];
+      }
+
+      let results = [];
+
+      // --- Attempt 1: POST /germplasm/search with nameFilter ---
+      try {
+        const r1 = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/search', {
+          method: 'POST',
+          headers: {'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        });
+        if (r1.ok) {
+          const d1 = await r1.json();
+          results = (d1.result && d1.result.data) ? d1.result.data : (Array.isArray(d1.result) ? d1.result : []);
+        }
+      } catch(e1) {}
+
+      // --- Attempt 2: GET /germplasm/search?germplasmName= (BMS internal search) ---
+      if (results.length === 0 && (currentType === 'lname' || currentType === 'name')) {
+        try {
+          const params = new URLSearchParams({germplasmName: q, page, size: ps});
+          const r2 = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/search?' + params.toString(), {
+            headers: {'Authorization':'Bearer '+token,'accept':'application/json'}
+          });
+          if (r2.ok) {
+            const d2 = await r2.json();
+            results = (d2.result && d2.result.data) ? d2.result.data : (Array.isArray(d2.result) ? d2.result : (Array.isArray(d2) ? d2 : []));
+          }
+        } catch(e2) {}
+      }
+
+      // --- Attempt 3: BrAPI v2 germplasm with germplasmName filter ---
+      if (results.length === 0 && (currentType === 'lname' || currentType === 'name')) {
+        try {
+          const r3 = await fetch(url + '/bmsapi/' + crop + '/brapi/v2/germplasm?germplasmName=' + encodeURIComponent(q) + '&page=' + page + '&pageSize=' + ps, {
+            headers: {'Authorization':'Bearer '+token,'accept':'application/json'}
+          });
+          if (r3.ok) {
+            const d3 = await r3.json();
+            results = (d3.result && d3.result.data) ? d3.result.data : [];
+          }
+        } catch(e3) {}
+      }
+
+      searchResults = results;
+    }
+
+    renderSearchTable(ps, page);
+    if (searchResults.length > 0) {
+      const dbg = document.getElementById('debug-search');
+      if (dbg) { dbg.style.display='block'; dbg.textContent='Campos del primer resultado:\n'+JSON.stringify(searchResults[0],null,2); }
+      const emptyMsg = document.getElementById('debug-empty');
+      if (emptyMsg) emptyMsg.style.display='none';
+    }
+    setStatus('search-status', false, '✓ ' + searchResults.length + ' resultados — consultando disponibilidad...');
+    // Async: enrich table with numeric GID and available balance
+    enrichSearchWithInventory(url, crop);
+  } catch(e) {
+    setStatus('search-status', false, '');
+    showSearchErr('Error: ' + e.message);
+  }
+}
+
+function renderSearchTable(ps, page) {
+  const tbody = document.getElementById('search-tbody');
+  tbody.innerHTML = '';
+  if (!searchResults.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Sin resultados — intenta con otro tipo de búsqueda o verifica el LNAME exacto</td></tr>';
+    document.getElementById('search-results-wrap').style.display = 'block';
+    return;
+  }
+  searchResults.forEach(g => {
+    const dbId = String(g.germplasmDbId || g.gid || '-');
+    const lname = g.germplasmName || g.defaultDisplayName || '-';
+    const ped = g.pedigree || '-';
+    const basketKey = dbId;
+    const inB = basket.some(b => b.basketKey === basketKey);
+    const tr = document.createElement('tr');
+    tr.id = 'srow-' + dbId;
+    tr.innerHTML =
+      '<td><strong style="font-family:var(--mono);font-size:11px" title="'+dbId+'">' + dbId.substring(0,10) + '</strong></td>' +
+      '<td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text3)" id="ngid-'+dbId+'"><span style="opacity:.4">…</span></td>' +
+      '<td>' + lname + '</td>' +
+      '<td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + ped + '">' + ped + '</td>' +
+      '<td style="font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (g.germplasmPUI||g.derivedName||'-') + '</td>' +
+      '<td style="text-align:right;font-weight:600;font-family:var(--mono);font-size:12px" id="avail-'+dbId+'"><span style="color:var(--text3);font-weight:400;opacity:.4">…</span></td>' +
+      '<td style="font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap" id="fecha-'+dbId+'"><span style="opacity:.4">…</span></td>' +
+      '<td><button class="add-btn' + (inB?' added':'') + '" id="add-' + escQ(basketKey) + '" onclick="toggleBasket(\'' + escQ(basketKey) + '\',\'\',\'' + escQ(dbId) + '\',\'' + escQ(lname) + '\',\'' + escQ(ped) + '\')">' + (inB?'✓ Agregado':'+ Canasta') + '</button></td>';
+    tbody.appendChild(tr);
+  });
+  document.getElementById('search-total').textContent = '(' + searchResults.length + ' resultados)';
+  document.getElementById('search-results-wrap').style.display = 'block';
+  renderPagination(ps, page);
+}
+
+async function enrichSearchWithInventory(url, crop) {
+  if (!searchResults.length || !token) return;
+  const dbIds = searchResults.map(g => String(g.germplasmDbId || '')).filter(Boolean);
+  if (!dbIds.length) return;
+
+  // Resolve UUIDs → numeric GIDs
+  const uuidToNum = {};
+  try {
+    const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/matches', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+token,'Content-Type':'application/json','accept':'application/json'},
+      body: JSON.stringify({germplasmUUIDs: dbIds})
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const lista = Array.isArray(d) ? d : (d.germplasm || d.data || d.result || []);
+      lista.forEach((item, idx) => {
+        const numGid = String(item.gid || item.GID || item.id || '');
+        const uuid = item.germplasmDbId || item.germplasmUUID || item.uuid || item.uid || '';
+        if (numGid && uuid) uuidToNum[uuid] = numGid;
+        else if (numGid && dbIds[idx]) uuidToNum[dbIds[idx]] = numGid;
+      });
+    }
+  } catch(e) {}
+
+  // Fetch available balance for each and update cells
+  for (const g of searchResults) {
+    const dbId = String(g.germplasmDbId || '');
+    const numGid = uuidToNum[dbId] || '';
+    g._numericGid = numGid;
+    g._dbId = dbId;
+
+    const ngidEl = document.getElementById('ngid-' + dbId);
+    if (ngidEl) ngidEl.textContent = numGid || '-';
+
+    const availEl = document.getElementById('avail-' + dbId);
+    if (numGid && /^\d+$/.test(numGid)) {
+      try {
+        const r = await fetch(url + '/bmsapi/crops/' + crop + '/lots/germplasm/' + numGid, {
+          headers: {'Authorization':'Bearer '+token,'accept':'application/json'}
+        });
+        if (r.ok) {
+          const lots = extractList(await r.json());
+          const totalAvail = lots.reduce((s, l) => s + parseFloat(l.availableBalance || l.available || 0), 0);
+          const unit = lots.length ? (lots[0].unitName || lots[0].unit || '') : '';
+          // Get most recent creation date across all lots
+          const dates = lots.map(l => l.creationDate || l.stockCreatedDate || l.createdDate || l.dateCreated || l.stockDate || '').filter(Boolean);
+          const bestDate = dates.length ? dates.reduce((a,b) => compareDates(b,a) > 0 ? b : a, dates[0]) : '';
+          if (availEl) {
+            availEl.innerHTML = totalAvail > 0
+              ? '<span style="color:var(--accent-text)">' + totalAvail.toLocaleString() + '</span><span style="font-size:10px;color:var(--text3);margin-left:3px">' + unit + '</span>'
+              : '<span style="color:var(--text3)">0</span>';
+          }
+          const fechaEl = document.getElementById('fecha-' + dbId);
+          if (fechaEl) fechaEl.textContent = bestDate ? formatDate(bestDate) : '-';
+        } else {
+          if (availEl) availEl.innerHTML = '<span style="color:var(--text3)">-</span>';
+          const fechaEl = document.getElementById('fecha-' + dbId);
+          if (fechaEl) fechaEl.textContent = '-';
+        }
+      } catch(e) { if (availEl) availEl.innerHTML = '<span style="color:var(--text3)">err</span>'; }
+    } else if (availEl) availEl.innerHTML = '<span style="color:var(--text3)">-</span>';
+  }
+  setStatus('search-status', false, '✓ ' + searchResults.length + ' resultados con disponibilidad actualizada');
+}
+
+function renderPagination(ps, page) {
+  const row = document.getElementById('pagination-row'); row.innerHTML = '';
+  if (searchResults.length < ps && page === 0) return;
+  if (page > 0) { const b = mkBtn('← Anterior', ()=>doSearch(page-1)); row.appendChild(b); }
+  const s = document.createElement('span'); s.textContent = 'Página '+(page+1); row.appendChild(s);
+  if (searchResults.length >= ps) { const b = mkBtn('Siguiente →', ()=>doSearch(page+1)); row.appendChild(b); }
+}
+
+function mkBtn(txt, fn) {
+  const b = document.createElement('button');
+  b.className = 'btn btn-ghost'; b.style.cssText = 'font-size:12px;padding:5px 12px';
+  b.textContent = txt; b.onclick = fn; return b;
+}
+
+function escQ(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+
+/* ===================== BASKET ===================== */
+// basketKey = numericGid if available, else dbId
+// numericGid = the integer GID BMS shows in UI (used for /lots/germplasm/{id})
+// dbId = alphanumeric germplasmDbId (used for POST /lots/search)
+function toggleBasket(basketKey, numericGidArg, dbId, name, ped) {
+  const idx = basket.findIndex(b => b.basketKey === basketKey);
+  if (idx >= 0) basket.splice(idx, 1);
+  else {
+    // Try to get numericGid from enriched search results
+    const enriched = searchResults.find(g => (g.germplasmDbId || g.gid) === basketKey);
+    const numericGid = (enriched && enriched._numericGid) || numericGidArg || '';
+    basket.push({basketKey, numericGid, dbId: dbId || basketKey, name, pedigree: ped, isLname: false});
+  }
+  updateBasketUI();
+  const btn = document.getElementById('add-' + basketKey);
+  if (btn) { const inB = basket.some(b=>b.basketKey===basketKey); btn.className='add-btn'+(inB?' added':''); btn.textContent=inB?'✓ Agregado':'+ Canasta'; }
+}
+
+function addAllToBasket() {
+  searchResults.forEach(g => {
+    const numericGid = String(g.id || g.germplasmId || g.gid || '');
+    const dbId = String(g.germplasmDbId || numericGid);
+    const basketKey = numericGid || dbId;
+    if (basketKey && !basket.some(b=>b.basketKey===basketKey))
+      basket.push({basketKey, numericGid, dbId, name: g.germplasmName||basketKey, pedigree: g.pedigree||'', isLname:false});
+  });
+  updateBasketUI();
+  renderSearchTable(parseInt(document.getElementById('page-size').value), currentPage);
+}
+
+function addManualGIDs() {
+  const raw = document.getElementById('manual-gids').value;
+  const gids = raw.split(/[\s,;\n]+/).map(s=>s.trim()).filter(s=>/^\d+$/.test(s));
+  gids.forEach(gid => {
+    if (!basket.some(b=>b.basketKey===gid))
+      basket.push({basketKey:gid, numericGid:gid, dbId:gid, name:'GID '+gid, pedigree:'', isLname:false});
+  });
+  updateBasketUI();
+  document.getElementById('manual-gids').value = '';
+}
+
+function addManualLNAMEs() {
+  const raw = document.getElementById('manual-lnames').value;
+  const lnames = raw.split(/[\n]+/).map(s=>s.trim()).filter(s=>s.length>0);
+  lnames.forEach(lname => {
+    const key = 'LNAME:' + lname;
+    if (!basket.some(b=>b.basketKey===key))
+      basket.push({basketKey:key, numericGid:'', dbId:'', name:lname, pedigree:'', isLname:true});
+  });
+  updateBasketUI();
+  document.getElementById('manual-lnames').value = '';
+}
+
+function removeFromBasket(key) { basket = basket.filter(b=>b.basketKey!==key); updateBasketUI(); }
+function clearBasket() { basket = []; updateBasketUI(); }
+
+function updateBasketUI() {
+  const chips = document.getElementById('basket-chips');
+  const count = basket.length;
+  if (!count) {
+    chips.innerHTML = '<span style="font-size:12px;color:var(--text3)">Canasta vacía</span>';
+    document.getElementById('basket-count-txt').textContent = '(vacía)';
+  } else {
+    chips.innerHTML = '';
+    basket.forEach(b => {
+      const c = document.createElement('span'); c.className = 'chip';
+      const label = b.isLname ? '📋 '+b.name : (b.numericGid ? 'GID '+b.numericGid+' — '+b.name : b.name);
+      c.innerHTML = label + ' <button class="chip-x" onclick="removeFromBasket(\'' + escQ(b.basketKey) + '\')" title="Quitar">×</button>';
+      chips.appendChild(c);
+    });
+    document.getElementById('basket-count-txt').textContent = '(' + count + ' entradas)';
+  }
+  const badge = document.getElementById('nb-basket');
+  if (count > 0) { badge.style.display='inline-block'; badge.textContent=count; } else badge.style.display='none';
+}
+
+/* ===================== INVENTORY ===================== */
+async function consultarInventario() {
+  const errEl = document.getElementById('inv-error');
+  if (!basket.length) { errEl.textContent='La canasta está vacía.'; errEl.style.display='block'; return; }
+  errEl.style.display = 'none';
+  document.getElementById('inv-results-wrap').style.display = 'none';
+  document.getElementById('inv-metrics').style.display = 'none';
+  document.getElementById('btn-inv').disabled = true;
+  document.getElementById('btn-go-export').disabled = true;
+  invResults = [];
+  selectedLots = {};
+  const dbg = document.getElementById('inv-debug-box');
+  if (dbg) { dbg.textContent=''; dbg.style.display='block'; }
+
+  try { await ensureToken(); }
+  catch(e) { setStatus('inv-status',false,'✗ Error de token: '+e.message); document.getElementById('btn-inv').disabled=false; return; }
+
+  const {url, crop} = cfg();
+  let totalLotes = 0, totalUnits = 0;
+
+  // STEP 1: Resolve LNAMEs to germplasmDbId (alphanumeric UUID)
+  setStatus('inv-status', true, 'Resolviendo LNAMEs...');
+  for (let i = 0; i < basket.length; i++) {
+    const item = basket[i];
+    if (item.isLname) {
+      const resolved = await resolveGermplasmFromLNAME(url, crop, item.name);
+      if (resolved) {
+        item.dbId = resolved.dbId;
+        item.basketKey = resolved.dbId;
+        item.pedigree = resolved.pedigree || '';
+        item.isLname = false;
+        appendInvDebug('LNAME "' + item.name + '" → dbId: ' + resolved.dbId);
+      } else {
+        invResults.push({numericGid:'?', name:item.name, pedigree:'', lotUUID:'-', available:0, unit:'-',
+          status:'LNAME no encontrado — busca en "Buscar germoplasma" primero', notes:'', creationDate:'-', rawDate:''});
+      }
+    }
+  }
+
+  // STEP 2: Collect all germplasmDbIds (alphanumeric UUIDs) and resolve to numeric GIDs
+  // Using POST /crops/{crop}/germplasm/matches with germplasmUUIDs — same as your Google Apps Script
+  const resolvedItems = basket.filter(b => !b.isLname && b.dbId);
+  const uuids = resolvedItems.map(b => b.dbId).filter(Boolean);
+
+  setStatus('inv-status', true, 'Resolviendo ' + uuids.length + ' UUIDs a GIDs numéricos vía /germplasm/matches...');
+  appendInvDebug('POST /germplasm/matches con ' + uuids.length + ' UUIDs');
+
+  // Map from dbId → numericGid
+  const uuidToNumericGid = {};
+
+  if (uuids.length > 0) {
+    // Process in batches of 100 like the GAS script
+    const BATCH = 100;
+    for (let bi = 0; bi < uuids.length; bi += BATCH) {
+      const batch = uuids.slice(bi, bi + BATCH);
+      try {
+        const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/matches', {
+          method: 'POST',
+          headers: {'Authorization':'Bearer '+token, 'Content-Type':'application/json', 'accept':'application/json'},
+          body: JSON.stringify({germplasmUUIDs: batch})
+        });
+        appendInvDebug('/germplasm/matches HTTP ' + r.status + ' (batch ' + (bi/BATCH+1) + ')');
+        if (r.ok) {
+          const d = await r.json();
+          appendInvDebug('matches response: ' + JSON.stringify(d).substring(0, 300));
+          let lista = Array.isArray(d) ? d : (d.germplasm || d.data || d.result || []);
+          lista.forEach((item, idx) => {
+            const numGid = String(item.gid || item.GID || item.id || '');
+            if (!numGid) return;
+            // Match by germplasmDbId field in response
+            const matchUUID = item.germplasmDbId || item.germplasmUUID || item.uuid || item.uid || '';
+            if (matchUUID && uuidToNumericGid[matchUUID] === undefined) {
+              uuidToNumericGid[matchUUID] = numGid;
+              appendInvDebug('  → ' + matchUUID.substring(0,12) + ' = GID ' + numGid);
+            } else if (!matchUUID && batch[idx]) {
+              // fallback: use positional index
+              uuidToNumericGid[batch[idx]] = numGid;
+              appendInvDebug('  [pos'+idx+'] → ' + batch[idx].substring(0,12) + ' = GID ' + numGid);
+            }
+          });
+        } else {
+          const errTxt = await r.text();
+          appendInvDebug('matches error body: ' + errTxt.substring(0,200));
+        }
+      } catch(e) { appendInvDebug('matches exception: ' + e.message); }
+    }
+  }
+
+  appendInvDebug('GIDs resueltos: ' + Object.keys(uuidToNumericGid).length + '/' + uuids.length);
+
+  // STEP 3: For each item, use numeric GID to fetch lots
+  for (let i = 0; i < resolvedItems.length; i++) {
+    const item = resolvedItems[i];
+    const numericGid = uuidToNumericGid[item.dbId] || item.numericGid || '';
+    const displayGid = numericGid || item.dbId.substring(0,10);
+
+    setStatus('inv-status', true, 'Consultando lotes GID ' + displayGid + ' "' + item.name + '" (' + (i+1) + '/' + resolvedItems.length + ')...');
+
+    try {
+      let lots = [];
+
+      if (numericGid && /^\d+$/.test(numericGid)) {
+        // PRIMARY: numeric GID — /lots/germplasm/{numericGid}
+        appendInvDebug('GID ' + numericGid + ': GET /lots/germplasm/' + numericGid);
+        lots = await fetchLotsByNumericGID(url, crop, numericGid);
+        appendInvDebug('  → ' + lots.length + ' lotes');
+      }
+
+      if (!lots.length) {
+        // FALLBACK: try POST /lots/search with germplasmDbIds
+        appendInvDebug('Fallback POST /lots/search para ' + item.dbId.substring(0,12));
+        lots = await fetchLotsByDbId(url, crop, item.dbId);
+        appendInvDebug('  → ' + lots.length + ' lotes');
+      }
+
+      if (!lots.length) {
+        invResults.push({numericGid: numericGid||'?', name:item.name, pedigree:item.pedigree,
+          lotUUID:'-', available:0, unit:'-', status:'Sin lotes', notes:'', creationDate:'-', rawDate:''});
+        continue;
+      }
+
+      lots.forEach(l => {
+        const av = parseFloat(l.availableBalance || l.available || l.actualBalance || 0);
+        totalUnits += av;
+        totalLotes++;
+        const rawDate = l.creationDate || l.stockCreatedDate || l.createdDate || l.dateCreated || l.stockDate || '';
+        invResults.push({
+          numericGid: numericGid || item.dbId.substring(0,10),
+          name: item.name,
+          pedigree: item.pedigree,
+          lotUUID: l.lotUUID || l.lotId || l.stockId || l.uid || '-',
+          available: av,
+          unit: l.unitName || l.unit || 'und',
+          status: l.status || 'Activo',
+          notes: l.notes || l.comments || '',
+          creationDate: rawDate ? formatDate(rawDate) : '-',
+          rawDate
+        });
+      });
+
+    } catch(e) {
+      appendInvDebug('Error GID ' + displayGid + ': ' + e.message);
+      invResults.push({numericGid: displayGid, name:item.name, pedigree:item.pedigree,
+        lotUUID:'-', available:0, unit:'-', status:'Error: '+e.message, notes:'', creationDate:'-', rawDate:''});
+    }
+  }
+
+  setStatus('inv-status', false, '✓ Completado — ' + resolvedItems.length + ' germoplasmas, ' + totalLotes + ' lotes encontrados');
+  document.getElementById('im-total').textContent = resolvedItems.length;
+  document.getElementById('im-lotes').textContent = totalLotes;
+  document.getElementById('im-sel').textContent = Object.keys(selectedLots).length;
+  document.getElementById('im-units').textContent = Math.round(totalUnits).toLocaleString();
+  document.getElementById('inv-metrics').style.display = 'block';
+  renderInvTable();
+  document.getElementById('inv-results-wrap').style.display = 'block';
+  document.getElementById('btn-inv').disabled = false;
+  document.getElementById('btn-go-export').disabled = false;
+}
+
+async function fetchLotsByDbId(url, crop, germplasmDbId) {
+  // Fallback: POST /lots/search with germplasmDbIds
+  try {
+    const r = await fetch(url + '/bmsapi/crops/' + crop + '/lots/search', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+token, 'Content-Type':'application/json', 'accept':'application/json'},
+      body: JSON.stringify({germplasmDbIds: [germplasmDbId]})
+    });
+    if (r.ok) return extractList(await r.json());
+  } catch(e) {}
+  return [];
+}
+
+async function fetchLotsByNumericGID(url, crop, numericGid) {
+  try {
+    const r = await fetch(url + '/bmsapi/crops/' + crop + '/lots/germplasm/' + numericGid, {
+      headers: {'Authorization':'Bearer '+token, 'accept':'application/json'}
+    });
+    if (r.ok) return extractList(await r.json());
+  } catch(e) {}
+  return [];
+}
+
+function appendInvDebug(msg) {
+  const box = document.getElementById('inv-debug-box');
+  if (box) {
+    box.style.display = 'block';
+    box.textContent += msg + '\n';
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
+function extractList(d) {
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.result)) return d.result;
+  if (d && d.result && Array.isArray(d.result.data)) return d.result.data;
+  if (d && Array.isArray(d.data)) return d.data;
+  if (d && d.content && Array.isArray(d.content)) return d.content;
+  return [];
+}
+
+async function resolveGermplasmFromLNAME(url, crop, lname) {
+  // Try POST germplasm/search — get numeric id from response
+  const tryExtract = (items) => {
+    if (!items || !items.length) return null;
+    const g = items[0];
+    // BMS numeric GID is in 'id', 'germplasmId', or 'gid' — NOT germplasmDbId which is alphanumeric
+    const numericGid = String(g.id || g.germplasmId || g.gid || '');
+    const dbId = String(g.germplasmDbId || numericGid);
+    return {numericGid, dbId, pedigree: g.pedigree||''};
+  };
+
+  try {
+    const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/search', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body: JSON.stringify({germplasmNames:[lname], pageSize:5})
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const result = tryExtract(extractList(d.result || d));
+      if (result && (result.numericGid || result.dbId)) return result;
+    }
+  } catch(e) {}
+
+  try {
+    const r = await fetch(url + '/bmsapi/crops/' + crop + '/germplasm/search?germplasmName=' + encodeURIComponent(lname), {
+      headers: {'Authorization':'Bearer '+token,'accept':'application/json'}
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const result = tryExtract(extractList(d.result || d));
+      if (result && (result.numericGid || result.dbId)) return result;
+    }
+  } catch(e) {}
+
+  return null;
+}
+
+function formatDate(raw) {
+  if (!raw) return '-';
+  try {
+    // Handle epoch milliseconds
+    if (/^\d{10,}$/.test(String(raw))) {
+      const d = new Date(parseInt(raw));
+      return d.toLocaleDateString('es-GT', {year:'numeric', month:'2-digit', day:'2-digit'});
+    }
+    const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return m[3] + '/' + m[2] + '/' + m[1];
+    // Handle ISO or date string
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString('es-GT', {year:'numeric', month:'2-digit', day:'2-digit'});
+  } catch(e) {}
+  return String(raw);
+}
+
+function toggleSelectLot(lotUUID) {
+  if (selectedLots[lotUUID]) delete selectedLots[lotUUID];
+  else selectedLots[lotUUID] = true;
+  const count = Object.keys(selectedLots).length;
+  document.getElementById('im-sel').textContent = count;
+  document.getElementById('sel-count-lbl').textContent = count > 0 ? count + ' lote(s) seleccionado(s) ⭐' : '';
+  renderInvTable();
+}
+
+function renderInvTable() {
+  const sort = document.getElementById('inv-sort').value;
+  let data = [...invResults];
+  if (sort === 'avail_desc') data.sort((a,b) => b.available - a.available);
+  else if (sort === 'avail_asc') data.sort((a,b) => a.available - b.available);
+  else if (sort === 'gid_asc') data.sort((a,b) => parseInt(a.numericGid||0) - parseInt(b.numericGid||0));
+  else if (sort === 'date_desc') data.sort((a,b) => compareDates(b.rawDate, a.rawDate));
+  else if (sort === 'date_asc') data.sort((a,b) => compareDates(a.rawDate, b.rawDate));
+
+  const tbody = document.getElementById('inv-tbody'); tbody.innerHTML = '';
+  data.forEach(row => {
+    const tr = document.createElement('tr');
+    const isSel = selectedLots[row.lotUUID];
+    if (isSel) tr.className = 'selected-row';
+    let sb = '';
+    const s = (row.status||'').toLowerCase();
+    if (s.includes('error') || s.includes('no encontrado')) sb = '<span class="badge b-red">'+row.status+'</span>';
+    else if (s.includes('sin') || row.available === 0) sb = '<span class="badge b-amber">'+row.status+'</span>';
+    else sb = '<span class="badge b-green">'+row.status+'</span>';
+    const luuid = row.lotUUID !== '-' ? row.lotUUID.substring(0,16)+(row.lotUUID.length>16?'…':'') : '-';
+    const selBtnClass = 'sel-btn' + (isSel?' selected':'');
+    const selBtnTxt = isSel ? '⭐ Seleccionado' : 'Seleccionar';
+    const selAction = row.lotUUID !== '-' ? 'onclick="toggleSelectLot(\'' + escQ(row.lotUUID) + '\')"' : 'disabled style="opacity:.4"';
+
+    tr.innerHTML =
+      '<td><strong style="font-family:var(--mono);font-size:12px">' + (row.numericGid||'-') + '</strong></td>' +
+      '<td>' + row.name + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px" title="'+row.lotUUID+'">' + luuid + '</td>' +
+      '<td style="text-align:right;font-weight:600;font-family:var(--mono)">' + (row.available>0?row.available.toLocaleString():'—') + '</td>' +
+      '<td style="color:var(--text3)">' + row.unit + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px;white-space:nowrap">' + row.creationDate + '</td>' +
+      '<td>' + sb + '</td>' +
+      '<td style="font-size:11px;color:var(--text3);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + row.notes + '</td>' +
+      '<td><button class="' + selBtnClass + '" ' + selAction + '>' + selBtnTxt + '</button></td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function compareDates(a, b) {
+  const toMs = v => {
+    if (!v || v === '-') return 0;
+    if (/^\d{10,}$/.test(String(v))) return parseInt(v);
+    return new Date(v).getTime() || 0;
+  };
+  return toMs(a) - toMs(b);
+}
+
+/* ===================== EXPORT ===================== */
+function checkExportData() {
+  if (!invResults.length) {
+    document.getElementById('export-no-data').style.display = 'block';
+    document.getElementById('export-content').style.display = 'none';
+  } else {
+    document.getElementById('export-no-data').style.display = 'none';
+    document.getElementById('export-content').style.display = 'block';
+  }
+}
+
+function buildExportRows() {
+  const incGid     = document.getElementById('exp-gid').checked;
+  const incName    = document.getElementById('exp-name').checked;
+  const incPed     = document.getElementById('exp-pedigree').checked;
+  const incLot     = document.getElementById('exp-lot').checked;
+  const incAvail   = document.getElementById('exp-avail').checked;
+  const incUnit    = document.getElementById('exp-unit').checked;
+  const incDate    = document.getElementById('exp-date').checked;
+  const incStatus  = document.getElementById('exp-status').checked;
+  const incNotes   = document.getElementById('exp-notes').checked;
+  const fSel       = document.getElementById('ef-selected').checked;
+  const fAll       = document.getElementById('ef-all').checked;
+  const fActive    = document.getElementById('ef-active').checked;
+  const fEmpty     = document.getElementById('ef-empty').checked;
+
+  let data = [...invResults];
+
+  // Filter by selection
+  if (fSel && !fAll) {
+    data = data.filter(r => selectedLots[r.lotUUID]);
+  }
+  // Filter by availability
+  data = data.filter(r => {
+    if (r.available > 0) return fActive;
+    return fEmpty;
+  });
+
+  data.sort((a,b) => b.available - a.available);
+
+  const headers = [];
+  if (incGid)    headers.push('GID');
+  if (incName)   headers.push('Germoplasma');
+  if (incPed)    headers.push('Pedigree');
+  if (incLot)    headers.push('LotUUID');
+  if (incAvail)  headers.push('Disponible');
+  if (incUnit)   headers.push('Unidad');
+  if (incDate)   headers.push('Fecha_Creacion');
+  if (incStatus) headers.push('Estado');
+  if (incNotes)  headers.push('Notas');
+
+  const rows = [headers.join(',')];
+  data.forEach(r => {
+    const row = [];
+    if (incGid)    row.push(r.numericGid);
+    if (incName)   row.push(r.name);
+    if (incPed)    row.push(r.pedigree||'');
+    if (incLot)    row.push(r.lotUUID);
+    if (incAvail)  row.push(r.available);
+    if (incUnit)   row.push(r.unit);
+    if (incDate)   row.push(r.creationDate);
+    if (incStatus) row.push(r.status);
+    if (incNotes)  row.push(r.notes);
+    rows.push(row.map(v => '"'+String(v||'').replace(/"/g,'""')+'"').join(','));
+  });
+  return rows;
+}
+
+function updatePreview() {
+  checkExportData();
+  if (!invResults.length) return;
+  const rows = buildExportRows();
+  document.getElementById('export-summary').textContent = (rows.length-1) + ' filas listas para exportar';
+  const preview = rows.slice(0,8).join('\n') + (rows.length>8?'\n... ('+(rows.length-1)+' filas total)':'');
+  document.getElementById('export-preview').textContent = preview;
+}
+
+function doExportCSV() {
+  const rows = buildExportRows();
+  if (rows.length <= 1) { alert('Sin datos para exportar con los filtros actuales'); return; }
+  const csv = rows.join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bms_estudio_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+/* ===================== HELPERS ===================== */
+function setStatus(id, loading, msg) {
+  const el = document.getElementById(id);
+  el.innerHTML = loading ? '<div class="spinner"></div>' + msg : msg;
+}
+
+function showSearchErr(msg) {
+  const el = document.getElementById('search-error');
+  el.textContent = msg; el.style.display = 'block';
+  setStatus('search-status', false, '');
+}
+</script>
+</body>
+</html>
