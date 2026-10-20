@@ -327,6 +327,8 @@
               <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-clean" checked onchange="updateBulkCount()"> Limpiar sufijos — usar solo el código (ej. "SNHWZ260455 (F5B nursery)" → "SNHWZ260455")</label>
               <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-exact" checked> Solo GIDs con coincidencia exacta del nombre (si no hay exacta, muestra las parciales marcadas)</label>
               <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-closed" checked> Incluir lotes cerrados / sin saldo</label>
+              <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-fixped" checked> Si la búsqueda devuelve "Unknown/Unknown", consultar el pedigrí en otros endpoints de BMS (si BMS no lo tiene, queda "Unknown/Unknown")</label>
+              <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-pedexcel"> Usar pedigrí del Excel principal cuando BMS no lo tenga (queda marcado en "Fuente pedigrí")</label>
               <label class="check-label" style="font-size:12px"><input type="checkbox" id="bulk-auto-add"> Auto-agregar a canasta el GID con más inventario</label>
             </div>
           </div>
@@ -339,6 +341,7 @@
             <button class="btn btn-ghost" onclick="document.getElementById('bulk-lnames-input').value='';updateBulkCount()">Limpiar</button>
           </div>
           <div class="status-bar" id="bulk-status" style="margin-top:8px"></div>
+          <pre id="ped-debug" style="display:none;background:#111;border-radius:6px;padding:8px 10px;font-family:var(--mono);font-size:10px;color:#74c69d;max-height:160px;overflow:auto;margin-top:6px;white-space:pre-wrap"></pre>
         </div>
 
         <!-- BULK RESULTS -->
@@ -828,6 +831,79 @@ function toDateObj(v) {
 
 function fmtISO(d) { return d ? d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') : ''; }
 
+/* ===================== PEDIGRÍ ===================== */
+// The germplasm search returns a 1-level pedigree built from registered parents ("Unknown/Unknown" when
+// BMS has no parents). Try other BMS endpoints, then fall back to the pedigree column of the main Excel.
+const pedCache = {};
+let pedDebugCount = 0;
+const isUnknownPed = p => !p || /^[\s\/\-]*$/.test(String(p).replace(/unknown|desconocido/ig, ''));
+
+function pedLog(msg) {
+  const box = document.getElementById('ped-debug');
+  if (!box) return;
+  box.style.display = 'block'; box.textContent += msg + '\n'; box.scrollTop = box.scrollHeight;
+}
+
+function pickPedField(o) {
+  if (!o || typeof o !== 'object') return '';
+  const cands = [o.pedigree, o.pedigreeString, o.crossExpansion, o.fullPedigree, o.pedigreeText, o.cross];
+  for (const c of cands) if (c && !isUnknownPed(c)) return String(c).trim();
+  // names / synonyms stored as CROSS / PED / PEDIGREE type
+  const lists = [].concat(o.synonyms || [], Array.isArray(o.names) ? o.names : [], o.germplasmNames || []);
+  for (const s of lists) {
+    if (!s || typeof s !== 'object') continue;
+    const t = String(s.type || s.nameType || s.nameTypeCode || '').toUpperCase();
+    const v = s.synonym || s.name || s.nval || '';
+    if (/^(CROSS|PED|PEDIGREE|CRSNM|CROSS_NAME|PEDIGRI)/.test(t) && v && !isUnknownPed(v)) return {value: String(v).trim(), source: 'BMS nombre ' + t};
+  }
+  return '';
+}
+
+async function fetchPedigree(url, crop, dbId, gid) {
+  const key = dbId || gid;
+  if (pedCache[key] !== undefined) return pedCache[key];
+  const H = {'Authorization':'Bearer '+token, 'accept':'application/json'};
+  const tries = [];
+  if (dbId && !/^\d+$/.test(dbId)) {
+    tries.push(['BrAPI pedigree', url + '/bmsapi/' + crop + '/brapi/v2/germplasm/' + encodeURIComponent(dbId) + '/pedigree']);
+    tries.push(['BrAPI germplasm', url + '/bmsapi/' + crop + '/brapi/v2/germplasm/' + encodeURIComponent(dbId)]);
+  }
+  if (gid) tries.push(['BMS germplasm', url + '/bmsapi/crops/' + crop + '/germplasm/' + gid]);
+  let res = {value:'', source:''};
+  for (const [label, u] of tries) {
+    try {
+      const r = await fetch(u, {headers: H});
+      const txt = r.ok ? await r.text() : '';
+      if (pedDebugCount < 6) { pedDebugCount++; pedLog('[' + label + '] GID ' + gid + ' HTTP ' + r.status + ' → ' + txt.substring(0, 350)); }
+      if (!r.ok) continue;
+      const d = JSON.parse(txt); const o = d.result || d;
+      let p = pickPedField(o);
+      if (p) { res = typeof p === 'object' ? p : {value: p, source: 'BMS (' + label + ')'}; break; }
+    } catch(e) { if (pedDebugCount < 6) { pedDebugCount++; pedLog('[' + label + '] GID ' + gid + ' error: ' + e.message); } }
+  }
+  pedCache[key] = res;
+  return res;
+}
+
+function excelPedFor(lname) {
+  const t = mainRows.find(r => r.lname.toUpperCase() === String(lname).toUpperCase());
+  return t && t.ped ? t.ped : '';
+}
+
+async function resolvePedigree(url, crop, g, gid, dbId, lname, opts) {
+  const orig = g.pedigree || '';
+  if (!isUnknownPed(orig)) return {pedigree: orig, pedSource: 'BMS (búsqueda)', pedBms: orig};
+  if (opts.fixPed) {
+    const r = await fetchPedigree(url, crop, dbId, gid);
+    if (r.value) return {pedigree: r.value, pedSource: r.source, pedBms: orig};
+  }
+  if (opts.pedExcel) {
+    const x = excelPedFor(lname);
+    if (x) return {pedigree: x, pedSource: 'Excel Hybrid status', pedBms: orig};
+  }
+  return {pedigree: orig || 'Unknown/Unknown', pedSource: 'Sin pedigrí en BMS', pedBms: orig};
+}
+
 /* ===================== BULK SEARCH: LNAME → GIDs → LOTES ===================== */
 let bulkResults = [];   // one row per lot (or per GID without lots / per LNAME not found)
 let bulkStop = false;
@@ -854,7 +930,8 @@ async function processOneLname(entry, url, crop, opts) {
     if (!gid && /^\d+$/.test(String(g.gid||''))) gid = String(g.gid);
     if (!gid && /^\d+$/.test(dbId)) gid = dbId;
     const name = g.germplasmName || g.defaultDisplayName || g.designation || lname;
-    const gBase = Object.assign({}, base, {found:true, dbId, numericGid:gid, lname:name, pedigree:g.pedigree||'', exact:g._exact});
+    const pedInfo = await resolvePedigree(url, crop, g, gid, dbId, lname, opts);
+    const gBase = Object.assign({}, base, {found:true, dbId, numericGid:gid, lname:name, exact:g._exact}, pedInfo);
 
     let lots = [];
     if (gid) lots = await fetchLotsByNumericGID(url, crop, gid);
@@ -886,14 +963,16 @@ async function processOneLname(entry, url, crop, opts) {
 async function doBulkSearch() {
   const entries = getBulkLnames();
   if (!entries.length) return;
-  bulkResults = []; bulkStop = false;
+  bulkResults = []; bulkStop = false; pedDebugCount = 0; const pd0 = document.getElementById('ped-debug'); if (pd0) { pd0.textContent = ''; pd0.style.display = 'none'; }
   document.getElementById('bulk-results-wrap').style.display = 'none';
   document.getElementById('btn-bulk-search').disabled = true;
   document.getElementById('btn-bulk-stop').disabled = false;
   const opts = {
     exactOnly: document.getElementById('bulk-exact').checked,
     includeClosed: document.getElementById('bulk-closed').checked,
-    autoAdd: document.getElementById('bulk-auto-add').checked
+    autoAdd: document.getElementById('bulk-auto-add').checked,
+    fixPed: document.getElementById('bulk-fixped').checked,
+    pedExcel: document.getElementById('bulk-pedexcel').checked
   };
   const {url, crop} = cfg();
 
@@ -941,7 +1020,7 @@ function bulkGidSummary() {
   const m = new Map();
   bulkResults.filter(r => r.found).forEach(r => {
     const k = r.searchedLname + '|' + (r.numericGid || r.dbId);
-    if (!m.has(k)) m.set(k, {searchedLname:r.searchedLname, original:r.original, numericGid:r.numericGid, dbId:r.dbId, lname:r.lname, pedigree:r.pedigree, exact:r.exact, nLots:0, nActive:0, totalAvail:0, unit:'', first:null, last:null});
+    if (!m.has(k)) m.set(k, {searchedLname:r.searchedLname, original:r.original, numericGid:r.numericGid, dbId:r.dbId, lname:r.lname, pedigree:r.pedigree, pedSource:r.pedSource, pedBms:r.pedBms, exact:r.exact, nLots:0, nActive:0, totalAvail:0, unit:'', first:null, last:null});
     const s = m.get(k);
     if (r.lotId || r.stockId) {
       s.nLots++;
@@ -1020,6 +1099,8 @@ function bulkDetailRows() {
     'Nombre BMS': r.lname || '',
     'Coincidencia': !r.found ? '' : (r.exact ? 'Exacta' : 'Parcial'),
     'Pedigrí': r.pedigree || '',
+    'Fuente pedigrí': r.pedSource || '',
+    'Pedigrí BMS (original)': r.pedBms || '',
     'Stock ID': r.stockId || '',
     'Lote UUID': r.lotId || '',
     'Fecha creación lote': r.dateObj || (r.rawDate || ''),
@@ -1041,6 +1122,8 @@ function bulkSummaryRows() {
     'Nombre BMS': s.lname,
     'Coincidencia': s.exact ? 'Exacta' : 'Parcial',
     'Pedigrí': s.pedigree,
+    'Fuente pedigrí': s.pedSource || '',
+    'Pedigrí BMS (original)': s.pedBms || '',
     '# lotes': s.nLots,
     '# lotes no cerrados': s.nActive,
     'Disponible total': s.totalAvail,
@@ -1062,8 +1145,8 @@ function bulkExportXLSX() {
     if (ws['!ref']) ws['!autofilter'] = {ref: ws['!ref']};
     return ws;
   };
-  XLSX.utils.book_append_sheet(wb, mk(bulkSummaryRows(), [16,9,22,11,40,8,10,14,8,14,14]), 'Resumen por GID');
-  XLSX.utils.book_append_sheet(wb, mk(bulkDetailRows(), [26,16,9,22,11,40,14,38,14,11,8,10,22,14,24,16]), 'Detalle lotes');
+  XLSX.utils.book_append_sheet(wb, mk(bulkSummaryRows(), [16,9,22,11,48,20,24,8,10,14,8,14,14]), 'Resumen por GID');
+  XLSX.utils.book_append_sheet(wb, mk(bulkDetailRows(), [26,16,9,22,11,48,20,24,14,38,14,11,8,10,22,14,24,16]), 'Detalle lotes');
   XLSX.writeFile(wb, 'LNAME_GIDs_lotes_' + new Date().toISOString().slice(0,10) + '.xlsx', {cellDates:true});
 }
 
@@ -1158,12 +1241,14 @@ async function xlLoadYellow() {
     let col = findHeaderCol(ctx, /^lname$/i);
     if (col < 0) col = parseInt(document.getElementById('xl-col').value) + 1;
     const L = numToCol(col);
+    const pcol = findHeaderCol(ctx, /^pedigree(?!.*previa)/i);
+    const PL = pcol > 0 ? numToCol(pcol) : null;
     mainRows = [];
     Object.keys(ctx.rowEls).map(Number).sort((a,b)=>a-b).forEach(rn => {
       if (rn < 2) return;
       const c = ctx.cells[L + rn]; if (!c) return;
       const val = cellText(c, ctx.sst).trim();
-      if (val && val !== '-' && ctx.isColored(c.getAttribute('s'))) mainRows.push({row: rn, original: val, lname: cleanLname(val)});
+      if (val && val !== '-' && ctx.isColored(c.getAttribute('s'))) mainRows.push({row: rn, original: val, lname: cleanLname(val), ped: PL ? cellText(ctx.cells[PL + rn], ctx.sst).trim() : ''});
     });
     document.getElementById('bulk-lnames-input').value = mainRows.map(r => r.original).join('\n');
     updateBulkCount();
